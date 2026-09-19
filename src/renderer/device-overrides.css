@@ -1,0 +1,3 @@
+.command { position: relative; }
+.command i { position: absolute; left: calc(2.25ch + var(--chars) * 1ch); }
+.command input:placeholder-shown + i { left: 2.25ch; }

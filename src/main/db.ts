@@ -30,6 +30,10 @@ export class CorpusDb {
       CREATE VIRTUAL TABLE IF NOT EXISTS clips_fts USING fts5(phrase,content='clips',content_rowid='rowid');
       CREATE TRIGGER IF NOT EXISTS clips_ai AFTER INSERT ON clips BEGIN INSERT INTO clips_fts(rowid,phrase) VALUES(new.rowid,new.phrase); END;
       CREATE TRIGGER IF NOT EXISTS clips_ad AFTER DELETE ON clips BEGIN INSERT INTO clips_fts(clips_fts,rowid,phrase) VALUES('delete',old.rowid,old.phrase); END;
+      CREATE TRIGGER IF NOT EXISTS clips_au AFTER UPDATE OF phrase ON clips BEGIN
+        INSERT INTO clips_fts(clips_fts,rowid,phrase) VALUES('delete',old.rowid,old.phrase);
+        INSERT INTO clips_fts(rowid,phrase) VALUES(new.rowid,new.phrase);
+      END;
     `)
     const put = this.db.prepare('INSERT OR IGNORE INTO settings(k,v) VALUES(?,?)')
     const tx = this.db.transaction(() => Object.entries(DEFAULT_SETTINGS).forEach(([k,v]) => put.run(k, JSON.stringify(v))))

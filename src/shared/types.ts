@@ -4,8 +4,8 @@ export type SourceId = string
 export interface Source { id: SourceId; label: string; title: string; era: number; kind: 'tv' | 'film' }
 export interface Clip { id: ClipId; phrase: string; dur: number; sourceId: SourceId; quality: number; phones?: string }
 export type Segment =
-  | { kind: 'clip'; text: string; clip: Clip; dur: number; audioStart?: number; audioEnd?: number }
-  | { kind: 'unmatched'; text: string; dur: number; audioStart?: number; audioEnd?: number }
+  | { kind: 'clip'; text: string; clip: Clip; dur: number; audioStart?: number; audioClipEnd?: number; audioEnd?: number }
+  | { kind: 'unmatched'; text: string; dur: number; audioStart?: number; audioClipEnd?: number; audioEnd?: number }
 export interface Utterance { id: string; input: string; reply: string; fragments: ClipId[]; seed: number; model: string; createdAt: string }
 export interface CorpusStats { clipCount: number; phraseCount: number; sourceCount: number; hours: number }
 export interface IngestProgress {
