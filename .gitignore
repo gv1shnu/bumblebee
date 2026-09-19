@@ -1,0 +1,12 @@
+node_modules/
+out/
+dist/
+.DS_Store
+*.log
+*.mkv
+*.mp4
+*.flac
+*.wav
+*.mp3
+*.opus
+coverage/

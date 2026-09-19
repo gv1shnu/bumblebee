@@ -1,0 +1,45 @@
+{
+  "name": "bumblebee-radio",
+  "version": "0.1.0",
+  "author": "Bumblebee Radio",
+  "private": true,
+  "description": "Local film and television dialogue radio for macOS",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "ingest": "tsx src/cli/ingest.ts",
+    "dist": "npm run build && electron-builder --mac dmg --arm64"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.2.0",
+    "sqlite-vec": "^0.1.7-alpha.2",
+    "zustand": "^5.0.8",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.3.1",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.2",
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^4.0.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.5",
+    "vitest": "^3.2.4"
+  },
+  "build": {
+    "appId": "local.bumblebee.radio",
+    "productName": "Bumblebee Radio",
+    "asarUnpack": ["node_modules/better-sqlite3/**/*", "node_modules/sqlite-vec/**/*"],
+    "files": ["out/**/*", "node_modules/**/*", "package.json"],
+    "mac": {"category": "public.app-category.entertainment", "icon": "build/icon.icns", "target": [{"target": "dmg", "arch": ["arm64"]}]}
+  }
+}

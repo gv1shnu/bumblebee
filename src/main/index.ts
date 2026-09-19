@@ -1,0 +1,28 @@
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { randomUUID } from 'node:crypto'
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { IPC } from '../shared/ipc'
+import type { Utterance } from '../shared/types'
+import { CorpusDb } from './db'
+import { Ingestor } from './ingest'
+import { generateReply } from './reply'
+import { detect, ensureFx, pullWhisper } from './setup'
+import { findBinary, run } from './process'
+
+let mainWindow:BrowserWindow|null=null;let corpus:CorpusDb;let ingestor:Ingestor
+const sender=(channel:string,payload:unknown)=>mainWindow?.webContents.send(channel,payload)
+function register(userData:string){
+  ipcMain.handle(IPC.stats,()=>corpus.stats());ipcMain.handle(IPC.sources,()=>corpus.sources());ipcMain.handle(IPC.lookup,(_,k)=>corpus.lookup(k))
+  ipcMain.handle(IPC.clipAudio,async(_,id)=>{const r=corpus.db.prepare('SELECT file FROM clips WHERE id=? AND rejected=0').get(id) as {file:string}|undefined;if(!r)throw new Error('Clip not found');const b=await readFile(r.file);return b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength)})
+  ipcMain.handle(IPC.fxAudio,async(_,name)=>{if(!['staticShort','staticLong','sweep','bed'].includes(name))throw new Error('Invalid effect');const b=await readFile(join(userData,'fx',`${name}.wav`));return b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength)})
+  ipcMain.handle(IPC.generate,async(_,input)=>{if(typeof input!=='string'||!input.trim())throw new Error('Message required');const result=await generateReply(corpus.db,input.slice(0,2000));if(corpus.settings().saveTranscripts){const u={id:randomUUID(),input,reply:result.reply,fragments:JSON.stringify(result.fragments),seed:result.seed,model:result.model,createdAt:new Date().toISOString()};corpus.db.prepare('INSERT INTO utterances VALUES(@id,@input,@reply,@fragments,@seed,@model,@createdAt)').run(u)}return result})
+  ipcMain.handle(IPC.pickFolder,async()=>{const r=await dialog.showOpenDialog({properties:['openDirectory']});return r.canceled?null:r.filePaths[0]});ipcMain.handle(IPC.startIngest,(_,f)=>ingestor.start(f));ipcMain.handle(IPC.cancelIngest,(_,id)=>ingestor.cancel(id))
+  ipcMain.handle(IPC.historyList,(_,l,o)=>corpus.history(l,o));ipcMain.handle(IPC.historySave,(_,u:Omit<Utterance,'id'|'createdAt'>)=>{const row={...u,id:randomUUID(),createdAt:new Date().toISOString()};corpus.db.prepare('INSERT INTO utterances VALUES(?,?,?,?,?,?,?)').run(row.id,row.input,row.reply,JSON.stringify(row.fragments),row.seed,row.model,row.createdAt);return row});ipcMain.handle(IPC.historyRemove,(_,id)=>corpus.db.prepare('DELETE FROM utterances WHERE id=?').run(id));ipcMain.handle(IPC.historyClear,()=>corpus.db.prepare('DELETE FROM utterances').run())
+  ipcMain.handle(IPC.settingsGet,()=>corpus.settings());ipcMain.handle(IPC.settingsSet,(_,p)=>corpus.setSettings(p));ipcMain.handle(IPC.pickExport,async()=>{const r=await dialog.showOpenDialog({properties:['openDirectory','createDirectory']});return r.canceled?null:r.filePaths[0]})
+  ipcMain.handle(IPC.detect,()=>detect(userData));ipcMain.handle(IPC.pullWhisper,(_,m)=>pullWhisper(userData,m,pct=>sender(IPC.pullProgress,{name:m,pct})));ipcMain.handle(IPC.pullOllama,async(_,m)=>{const bin=await findBinary('ollama');if(!bin)throw new Error('ollama not found');await run(bin,['pull',m],line=>{const n=line.match(/(\d+)%/);if(n)sender(IPC.pullProgress,{name:m,pct:Number(n[1])})})})
+  ipcMain.handle(IPC.reviewNext,(_,filter)=>{let sql='SELECT id,phrase,dur,sourceId,quality,phones FROM clips c WHERE rejected=0',args:unknown[]=[];if(filter?.sourceId){sql+=' AND sourceId=?';args.push(filter.sourceId)}if(filter?.untaggedOnly)sql+=' AND NOT EXISTS(SELECT 1 FROM clip_tags t WHERE t.clipId=c.id)';sql+=' ORDER BY quality ASC LIMIT 1';return corpus.db.prepare(sql).get(...args)??null});ipcMain.handle(IPC.reviewTag,(_,id,tags:string[])=>corpus.db.transaction(()=>{const s=corpus.db.prepare('INSERT OR IGNORE INTO clip_tags VALUES(?,?)');tags.forEach(t=>s.run(id,t.trim().toLowerCase()))})());ipcMain.handle(IPC.reviewReject,(_,id)=>corpus.db.prepare('UPDATE clips SET rejected=1 WHERE id=?').run(id))
+  ipcMain.handle(IPC.exportWrite,async(_,bytes:ArrayBuffer,ext:string,slug:string,srt?:string)=>{const settings=corpus.settings(),folder=settings.exportFolder||app.getPath('music');await mkdir(folder,{recursive:true});const now=new Date(),safe=slug.replace(/[^a-z0-9-_]+/gi,'-').slice(0,64),base=settings.filenamePattern.replace('{date}',now.toISOString().slice(0,10)).replace('{time}',now.toTimeString().slice(0,8).replace(/:/g,'-')).replace('{slug}',safe);const path=join(folder,`${base}.${ext}`);await writeFile(path,Buffer.from(bytes));if(srt&&settings.exportSrt)await writeFile(join(folder,`${base}.srt`),srt);return path})
+}
+async function createWindow(){mainWindow=new BrowserWindow({width:1180,height:760,minWidth:880,minHeight:600,backgroundColor:'#0a0906',titleBarStyle:'hiddenInset',webPreferences:{preload:join(__dirname,'../preload/index.js'),contextIsolation:true,nodeIntegration:false,sandbox:true}});if(process.env.ELECTRON_RENDERER_URL)await mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);else await mainWindow.loadFile(join(__dirname,'../renderer/index.html'))}
+app.whenReady().then(async()=>{const userData=app.getPath('userData');corpus=new CorpusDb(join(userData,'corpus.db'));ingestor=new Ingestor(corpus.db,userData,p=>sender(IPC.ingestProgress,p));register(userData);await ensureFx(userData);await createWindow();app.on('activate',()=>{if(BrowserWindow.getAllWindows().length===0)void createWindow()})});app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit()})
