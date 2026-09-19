@@ -38,7 +38,7 @@
   "build": {
     "appId": "local.bumblebee.radio",
     "productName": "Bumblebee Radio",
-    "asarUnpack": ["node_modules/better-sqlite3/**/*", "node_modules/sqlite-vec/**/*"],
+    "asarUnpack": ["node_modules/better-sqlite3/**/*", "node_modules/sqlite-vec/**/*", "node_modules/sqlite-vec-*/**/*"],
     "files": ["out/**/*", "node_modules/**/*", "package.json"],
     "mac": {"category": "public.app-category.entertainment", "icon": "build/icon.icns", "target": [{"target": "dmg", "arch": ["arm64"]}]}
   }

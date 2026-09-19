@@ -35,8 +35,9 @@ export class CorpusDb {
     const tx = this.db.transaction(() => Object.entries(DEFAULT_SETTINGS).forEach(([k,v]) => put.run(k, JSON.stringify(v))))
     tx()
     try {
-      const vec = require('sqlite-vec') as { load(db: Database.Database): void }
-      vec.load(this.db)
+      const vec = require('sqlite-vec') as { getLoadablePath(): string }
+      const extensionPath = vec.getLoadablePath().replace('app.asar/', 'app.asar.unpacked/')
+      this.db.loadExtension(extensionPath)
     } catch (error) { console.warn('Vector extension unavailable; using cosine fallback', error) }
   }
   settings(): Settings {
