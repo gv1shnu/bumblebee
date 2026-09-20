@@ -49,6 +49,8 @@ export function DeviceRadio({ sources, stats }: { sources: Source[]; stats?: Cor
   const [freeSpeak, setFreeSpeak] = useState(false)
   const [latency, setLatency] = useState<number>()
   const [seed, setSeed] = useState<number>()
+  const [exporting, setExporting] = useState(false)
+  const [exportName, setExportName] = useState<string>()
   const [clock, setClock] = useState<ClockState>({ now: 0, needle: 50, level: 0, flicker: false, active: -1, spectrum: [] })
   const raf = useRef(0)
   const physics = useRef({ position: 50, velocity: 0, last: 0, level: 0, nextFlicker: 9 })
@@ -144,6 +146,23 @@ export function DeviceRadio({ sources, stats }: { sources: Source[]; stats?: Cor
     await engine.play(segments, seed)
   }
 
+  const exportBroadcast = async () => {
+    if (phase !== 'idle' || !segments.length || seed == null || exporting) return
+    setExporting(true)
+    setExportName(undefined)
+    try {
+      const { wav, srt } = await engine.renderOffline(segments, seed)
+      const slug = (submitted || 'bumblebee').slice(0, 48)
+      const path = await window.bridge.exportAudio.write(wav, 'wav', slug, srt)
+      setExportName(path.split('/').pop())
+    } catch (error) {
+      console.warn('export failed', error)
+      setExportName('export failed')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   useEffect(() => {
     if (phase === 'playing' && clock.now >= (segments.at(-1)?.audioEnd ?? Infinity)) { setPhase('idle'); void engine.startIdle() }
   }, [clock.now, phase, segments])
@@ -196,7 +215,11 @@ export function DeviceRadio({ sources, stats }: { sources: Source[]; stats?: Cor
         })}
         {phase === 'idle' && segments.length === 0 && <span className="ghost">NO CARRIER</span>}
       </div>
-      {phase === 'idle' && segments.length > 0 && <div className="reply-actions"><button type="button" className="replay" onClick={replay} disabled={seed == null}>↻ Replay</button></div>}
+      {phase === 'idle' && segments.length > 0 && <div className="reply-actions">
+        <button type="button" className="replay" onClick={replay} disabled={seed == null}>↻ Replay</button>
+        <button type="button" className="replay export" onClick={exportBroadcast} disabled={seed == null || exporting}>{exporting ? 'saving…' : '⤓ Export'}</button>
+        {exportName && <span className="export-note">{exportName}</span>}
+      </div>}
       <p className="station-plate">{phase === 'thinking' ? 'SCANNING…' : activeSource ? `▮ ${frequencyLabel(activeSource)} · ${activeSource.title}` : '▯ BAND OPEN'}</p>
     </section>
 
