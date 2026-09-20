@@ -91,4 +91,13 @@ main.device { box-shadow: inset 0 1px var(--chrome-hi), inset 0 0 0 1px rgba(0, 
 
 @media (prefers-reduced-motion: reduce) { .command::after, .power, .service-nav button, .credits .gh, .credits .by { transition: none; } }
 
+/* Setup and Library are taller than the window — let the shell scroll while the
+   route nav stays pinned. The radio route fills the viewport exactly, so it never
+   shows a scrollbar. */
+.device-shell { overflow-y: auto; }
+.service-nav { position: fixed; }
+.device-shell::-webkit-scrollbar { width: 9px; }
+.device-shell::-webkit-scrollbar-thumb { background: #2a2a2d; border-radius: 4px; }
+.device-shell::-webkit-scrollbar-track { background: transparent; }
+
 @media (prefers-reduced-motion: reduce) { .bumble-face .eyes { animation: none; } .bumble-face .bar { transition: none; } }
