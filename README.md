@@ -9,6 +9,23 @@ Half the point is that it's approximate. It reaches for the nearest phrase it ha
 the borrowed voices together with tuning static, and runs the whole thing through one
 band-limited filter so a dozen unrelated recordings sound like a single damaged speaker.
 
+## Demo
+
+<!--
+  Demo video goes here. To embed it on GitHub:
+  1. Record a 30–60s screen capture (see the shot list below), export MP4, H.264, ≤ ~10 MB.
+  2. On github.com, edit this file (or open a throwaway issue) and drag the MP4 into the
+     text box. GitHub uploads it and inserts a URL like
+     https://github.com/gv1shnu/bumblebee/assets/<id>.
+  3. Paste that URL on its own line, right below this comment. GitHub renders an inline
+     player from a bare asset URL — no <video> tag or markdown needed.
+  Shot list: Setup (green checks, installed models) → pick a folder → Tune the library
+  (progress) → Radio: type a line, hear the spliced reply while the terminal types in sync
+  and the station tag changes → flip Free-speak and speak a literal line.
+-->
+
+_Demo video coming soon._
+
 ## What it needs
 
 Everything runs locally. Nothing leaves the machine except model downloads you ask for.

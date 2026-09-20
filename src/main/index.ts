@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { IPC } from '../shared/ipc'
 import type { Utterance } from '../shared/types'
@@ -25,4 +26,4 @@ function register(userData:string){
   ipcMain.handle(IPC.exportWrite,async(_,bytes:ArrayBuffer,ext:string,slug:string,srt?:string)=>{const settings=corpus.settings(),folder=settings.exportFolder||app.getPath('music');await mkdir(folder,{recursive:true});const now=new Date(),safe=slug.replace(/[^a-z0-9-_]+/gi,'-').slice(0,64),base=settings.filenamePattern.replace('{date}',now.toISOString().slice(0,10)).replace('{time}',now.toTimeString().slice(0,8).replace(/:/g,'-')).replace('{slug}',safe);const path=join(folder,`${base}.${ext}`);await writeFile(path,Buffer.from(bytes));if(srt&&settings.exportSrt)await writeFile(join(folder,`${base}.srt`),srt);return path})
 }
 async function createWindow(){mainWindow=new BrowserWindow({width:1180,height:760,minWidth:720,minHeight:560,backgroundColor:'#0a0a0b',titleBarStyle:'hiddenInset',webPreferences:{preload:join(__dirname,'../preload/index.js'),contextIsolation:true,nodeIntegration:false,sandbox:true}});mainWindow.webContents.setWindowOpenHandler(({url})=>{if(/^https?:\/\//.test(url))void shell.openExternal(url);return{action:'deny'}});if(process.env.ELECTRON_RENDERER_URL)await mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);else await mainWindow.loadFile(join(__dirname,'../renderer/index.html'))}
-app.whenReady().then(async()=>{const userData=app.getPath('userData');corpus=new CorpusDb(join(userData,'corpus.db'));ingestor=new Ingestor(corpus.db,userData,p=>sender(IPC.ingestProgress,p));register(userData);await ensureFx(userData);await createWindow();app.on('activate',()=>{if(BrowserWindow.getAllWindows().length===0)void createWindow()})});app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit()})
+app.whenReady().then(async()=>{if(process.platform==='darwin'){const icon=join(app.getAppPath(),'build','icon.png');if(existsSync(icon))app.dock?.setIcon(icon)}const userData=app.getPath('userData');corpus=new CorpusDb(join(userData,'corpus.db'));ingestor=new Ingestor(corpus.db,userData,p=>sender(IPC.ingestProgress,p));register(userData);await ensureFx(userData);await createWindow();app.on('activate',()=>{if(BrowserWindow.getAllWindows().length===0)void createWindow()})});app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit()})
