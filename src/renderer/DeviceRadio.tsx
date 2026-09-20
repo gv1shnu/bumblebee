@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import type { Segment, Source } from '../shared/types'
+import type { CorpusStats, Segment, Source } from '../shared/types'
 import { mulberry32, RadioEngine } from './audio'
 import { matchText } from './matcher'
 
@@ -40,13 +40,14 @@ function BumblebeeFace({ level, speaking }: { level: number; speaking: boolean }
   )
 }
 
-export function DeviceRadio({ sources }: { sources: Source[] }) {
+export function DeviceRadio({ sources, stats }: { sources: Source[]; stats?: CorpusStats }) {
   const engine = useMemo(() => new RadioEngine(), [])
   const [input, setInput] = useState('')
   const [submitted, setSubmitted] = useState('')
   const [segments, setSegments] = useState<Segment[]>([])
   const [phase, setPhase] = useState<Phase>('idle')
   const [freeSpeak, setFreeSpeak] = useState(false)
+  const [latency, setLatency] = useState<number>()
   const [clock, setClock] = useState<ClockState>({ now: 0, needle: 50, level: 0, flicker: false, active: -1 })
   const raf = useRef(0)
   const physics = useRef({ position: 50, velocity: 0, last: 0, level: 0, nextFlicker: 9 })
@@ -112,11 +113,13 @@ export function DeviceRadio({ sources }: { sources: Source[] }) {
     setSubmitted(message)
     setInput('')
     setPhase('thinking')
+    const started = performance.now()
     await engine.ctx.resume()
     const result = freeSpeak
       ? { reply: message, seed: Array.from(message).reduce((n, c) => Math.imul(n ^ c.charCodeAt(0), 16777619), 2166136261) >>> 0 }
       : await window.bridge.reply.generate(message)
     const matched = await matchText(result.reply)
+    setLatency(Math.round(performance.now() - started))
     setSegments(matched)
     await engine.play(matched, result.seed)
     setPhase('playing')
@@ -153,6 +156,13 @@ export function DeviceRadio({ sources }: { sources: Source[] }) {
     </section>
 
     <section className="terminal" aria-live="polite">
+      <p className="hud" aria-label="Corpus statistics">
+        <span><b>{(stats?.clipCount ?? 0).toLocaleString()}</b> lines</span>
+        <span><b>{(stats?.phraseCount ?? 0).toLocaleString()}</b> phrases</span>
+        <span><b>{stats?.sourceCount ?? 0}</b> sources</span>
+        <span><b>{(stats?.hours ?? 0).toFixed(1)}</b> hrs</span>
+        <span><b>{latency != null ? latency : '—'}</b> ms latency</span>
+      </p>
       <p className="user-line"><span>&gt;</span> {submitted || 'receiver standing by'}</p>
       {phase === 'idle' && segments.length === 0 && <p className="intro">Bumblebee Radio — it answers only in fragments of dialogue spliced from films and television you own.</p>}
       <div className="reply-line">
@@ -175,5 +185,11 @@ export function DeviceRadio({ sources }: { sources: Source[] }) {
       <label className="command" style={{ '--chars': Math.min(48, input.length) } as CSSProperties}><b>&gt;</b><input value={input} onChange={event => setInput(event.target.value)} disabled={phase !== 'idle'} placeholder={phase === 'thinking' ? 'scanning band…' : phase === 'playing' ? 'transmitting…' : 'type a message'} /><i /></label>
       <button className="power" aria-label="Transmit" disabled={phase !== 'idle'}>⏻</button>
     </form>
+    <footer className="credits">
+      <a className="gh" href="https://github.com/gv1shnu" target="_blank" rel="noreferrer" aria-label="GitHub">
+        <svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+      <a className="by" href="https://vishnugandarapu.in" target="_blank" rel="noreferrer">transformed by vishnu gandarapu</a>
+    </footer>
   </main>
 }
