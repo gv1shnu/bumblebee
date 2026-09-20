@@ -109,8 +109,14 @@ export function DeviceRadio({ sources, stats }: { sources: Source[]; stats?: Cor
       raf.current = requestAnimationFrame(tick)
     }
     raf.current = requestAnimationFrame(tick)
-    return () => { cancelAnimationFrame(raf.current); void engine.stop() }
+    return () => cancelAnimationFrame(raf.current)
   }, [engine, phase, segments])
+
+  // Stop the engine only when the component actually unmounts — NOT on every phase/segment
+  // change. The tick effect above re-runs whenever phase or segments change; folding
+  // engine.stop() into its cleanup was tearing down the audio ~30 ms after play()
+  // scheduled it (before the 150 ms lead-in), so nothing was ever heard.
+  useEffect(() => () => { void engine.stop() }, [engine])
 
   const transmit = async (event: FormEvent) => {
     event.preventDefault()
