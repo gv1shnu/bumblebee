@@ -8,6 +8,7 @@ import { phraseKey } from '../shared/normalize'
 import { findBinary, run } from './process'
 import { embedBatch } from './ollama'
 import { storeEmbeddings } from './db'
+import { ensureSpeechHelper, speechTranscribe } from './speech'
 
 const VIDEO=new Set(['.mkv','.mp4','.mov','.m4v','.avi','.webm'])
 const AUDIO=new Set(['.mp3','.m4a','.aac','.flac','.wav','.ogg','.opus','.aiff','.aif','.wma'])
@@ -77,8 +78,24 @@ async function englishSubtitle(file:string,work:string,probe:any,ffmpeg:string):
 
 export class Ingestor{
   private cancelled=new Set<string>()
+  private speechHelper:string|null|undefined // undefined = not yet probed
   constructor(private db:Database.Database,private userData:string,private progress:(p:IngestProgress)=>void){}
   cancel(job:string){this.cancelled.add(job)}
+  // Second-pass ASR: when whisper covered little of the audio, ask the on-device Speech
+  // engine and add only the phrases whisper didn't already find. Best effort throughout.
+  private async augmentWithSpeech(job:string,file:string,index:number,total:number,wav:string,lang:string|undefined,words:Word[],dur:number,spans:Candidate[]):Promise<Candidate[]>{
+    const spoken=words.reduce((a,w)=>a+Math.max(0,w.end-w.start),0)
+    const thin=dur>0?spoken/dur<.5:words.length<8
+    if(!thin)return spans
+    if(this.speechHelper===undefined)this.speechHelper=await ensureSpeechHelper(this.userData)
+    if(!this.speechHelper)return spans
+    this.emit(job,'align',file,index,total,50,'Second-pass transcription')
+    const sw=await speechTranscribe(this.speechHelper,wav,lang)
+    if(!sw.length)return spans
+    const have=new Set(spans.map(c=>phraseKey(c.phrase)))
+    const missed=candidates(sw).filter(c=>{const k=phraseKey(c.phrase);return k&&!have.has(k)})
+    return missed.length?[...spans,...missed]:spans
+  }
   async start(folders:string[]):Promise<string>{const job=id('job');void this.batch(job,folders);return job}
   private emit(job:string,stage:IngestProgress['stage'],file:string,index:number,total:number,pct:number,message:string){this.progress({jobId:job,stage,file,fileIndex:index,fileTotal:total,pct,message})}
   private async batch(job:string,folders:string[]){try{const files=await scanFolders(folders);if(!files.length){this.emit(job,'error','',0,0,0,'No media files found in that folder');return}let failed=0;for(let i=0;i<files.length;i++){if(this.cancelled.has(job))break;try{await this.one(job,files[i],i+1,files.length)}catch(e){failed++;console.warn('ingest failed for',files[i],e)}}const done=this.cancelled.has(job)?'Cancelled':failed?`Library ready — ${failed} of ${files.length} file${failed>1?'s':''} skipped`:'Library ready';this.emit(job,'done','',files.length,files.length,100,done)}catch(e){this.emit(job,'error','',0,0,0,e instanceof Error?e.message:String(e))}finally{this.cancelled.delete(job)}}
@@ -91,7 +108,7 @@ export class Ingestor{
     let spans:Candidate[]
     const subtitle=await englishSubtitle(file,work,probe,ffmpeg)
     if(subtitle){this.emit(job,'subtitles',file,index,total,45,'Reading English subtitles');spans=subtitleCandidates(parseCues(subtitle))}
-    else{const whisper=await findBinary('whisper-cli');if(!whisper)throw new Error('whisper-cli is required when no English subtitle is present');const wav=join(work,'whisper.wav');await run(ffmpeg,['-i',master,'-ar','16000','-ac','1','-y',wav]);const jsonPath=join(work,'whisper.json');try{await stat(jsonPath)}catch{this.emit(job,'align',file,index,total,35,'Transcribing and aligning');const settings=Object.fromEntries((this.db.prepare('SELECT k,v FROM settings').all() as Array<{k:string;v:string}>).map(r=>[r.k,JSON.parse(r.v)]));const model=settings.whisperModel||'base.en';const modelPath=join(this.userData,'models',`ggml-${model}.bin`);await run(whisper,['-m',modelPath,'-l','auto','-f',wav,'-ojf','-owts','-of',join(work,'whisper')]);await writeFile(jsonPath,await readFile(join(work,'whisper.json')))}spans=candidates(flattenWhisper(JSON.parse(await readFile(jsonPath,'utf8'))))}
+    else{const whisper=await findBinary('whisper-cli');if(!whisper)throw new Error('whisper-cli is required when no English subtitle is present');const wav=join(work,'whisper.wav');await run(ffmpeg,['-i',master,'-ar','16000','-ac','1','-y',wav]);const jsonPath=join(work,'whisper.json');try{await stat(jsonPath)}catch{this.emit(job,'align',file,index,total,35,'Transcribing and aligning');const settings=Object.fromEntries((this.db.prepare('SELECT k,v FROM settings').all() as Array<{k:string;v:string}>).map(r=>[r.k,JSON.parse(r.v)]));const model=settings.whisperModel||'base.en';const modelPath=join(this.userData,'models',`ggml-${model}.bin`);await run(whisper,['-m',modelPath,'-l','auto','-f',wav,'-ojf','-owts','-of',join(work,'whisper')]);await writeFile(jsonPath,await readFile(join(work,'whisper.json')))}const wj=JSON.parse(await readFile(jsonPath,'utf8'));const words=flattenWhisper(wj);spans=candidates(words);const lang=typeof wj?.result?.language==='string'?wj.result.language:undefined;spans=await this.augmentWithSpeech(job,file,index,total,wav,lang,words,Number(audio.duration)||0,spans)}
     this.emit(job,'segment',file,index,total,55,'Finding clean phrases');const sourceGain=(Number.parseInt(hash.slice(0,2),16)/255*6)-3
     const insertSource=this.db.prepare('INSERT INTO sources(id,label,title,era,kind,path,hash,ingestedAt) VALUES(?,?,?,?,?,?,?,?)');const insertClip=this.db.prepare('INSERT INTO clips(id,phrase,phraseKey,dur,sourceId,quality,file) VALUES(?,?,?,?,?,?,?)')
     const rows: Array<[string,Candidate,string]>=[];for(let i=0;i<spans.length;i++){if(this.cancelled.has(job))return;const c=spans[i],clipId=id('c'),out=join(clipDir,`${clipId}.flac`);this.emit(job,'cut',file,index,total,60+Math.round(35*i/Math.max(1,spans.length)),`Cutting ${i+1} of ${spans.length}`);await run(ffmpeg,['-ss',String(Math.max(0,c.start-.04)),'-to',String(c.end+.04),'-i',master,'-af',`silenceremove=start_periods=1:start_duration=0:start_threshold=-48dB:stop_periods=-1:stop_duration=0.04:stop_threshold=-48dB,afade=t=in:d=0.01,afade=t=out:st=${Math.max(.01,c.end-c.start+.068)}:d=0.012,loudnorm=I=${-18+sourceGain}:TP=-2:LRA=7`,'-ar','48000','-ac','1','-y',out]);rows.push([clipId,c,out])}

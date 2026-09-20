@@ -10,6 +10,7 @@ import { warmChat, warmEmbed, embedBatch } from './ollama'
 import { Ingestor } from './ingest'
 import { generateReply } from './reply'
 import { detect, ensureFx, pullWhisper } from './setup'
+import { ensureSpeechHelper } from './speech'
 import { findBinary, run } from './process'
 
 let mainWindow:BrowserWindow|null=null;let corpus:CorpusDb;let ingestor:Ingestor
@@ -33,4 +34,4 @@ async function warmAndBackfill(){try{
   await warmEmbed()
   for(;;){const need=phrasesNeedingEmbeddings(corpus.db,64);if(!need.length)break;const vecs=await embedBatch(need);const entries=need.flatMap((k,i)=>vecs[i]?[{phraseKey:k,vec:vecs[i]!}]:[]);if(!entries.length)break;storeEmbeddings(corpus.db,entries)}
 }catch(e){console.warn('warm/backfill failed',e)}}
-app.whenReady().then(async()=>{if(process.platform==='darwin'){const icon=join(app.getAppPath(),'build','icon.png');if(existsSync(icon))app.dock?.setIcon(icon)}const userData=app.getPath('userData');corpus=new CorpusDb(join(userData,'corpus.db'));ingestor=new Ingestor(corpus.db,userData,p=>sender(IPC.ingestProgress,p));register(userData);await ensureFx(userData);warmAndBackfill();await createWindow();app.on('activate',()=>{if(BrowserWindow.getAllWindows().length===0)void createWindow()})});app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit()})
+app.whenReady().then(async()=>{if(process.platform==='darwin'){const icon=join(app.getAppPath(),'build','icon.png');if(existsSync(icon))app.dock?.setIcon(icon)}const userData=app.getPath('userData');corpus=new CorpusDb(join(userData,'corpus.db'));ingestor=new Ingestor(corpus.db,userData,p=>sender(IPC.ingestProgress,p));register(userData);await ensureFx(userData);void ensureSpeechHelper(userData).catch(()=>null);warmAndBackfill();await createWindow();app.on('activate',()=>{if(BrowserWindow.getAllWindows().length===0)void createWindow()})});app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit()})

@@ -53,6 +53,9 @@
     "mac": {
       "category": "public.app-category.entertainment",
       "icon": "build/icon.icns",
+      "extendInfo": {
+        "NSSpeechRecognitionUsageDescription": "Bumblebee uses on-device speech recognition as a second transcriber, to capture dialogue your primary transcriber misses when building your local corpus."
+      },
       "target": [
         {
           "target": "dmg",
