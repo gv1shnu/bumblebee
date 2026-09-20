@@ -15,10 +15,12 @@ export interface IngestProgress {
 export interface MachineInfo {
   chip: string; ramGB: number; cores: number; hasFfmpeg: boolean; hasWhisper: boolean; hasOllama: boolean
   ollamaModels: string[]; whisperModels: string[]; recommendedWhisper: string; recommendedChat: string
+  recommendedContext: number
 }
 export interface Settings {
   mediaFolders: string[]; saveTranscripts: boolean; autoSaveAudio: boolean; exportFolder: string
   exportFormat: 'wav'|'mp3'|'m4a'; exportSrt: boolean; filenamePattern: string
   historyRetention: 'all'|'500'|'100'; whisperModel: string; chatModel: string; replyMode: 'llm'|'local'
+  contextLength: number; keepAlive: number; persona: boolean
 }
 export interface ReplyResult { reply: string; fragments: ClipId[]; seed: number; model: string }

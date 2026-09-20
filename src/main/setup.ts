@@ -13,8 +13,10 @@ export async function detect(userData: string): Promise<MachineInfo> {
   if (ollama) try { ollamaModels=(await run(ollama,['list'])).split('\n').slice(1).map(x=>x.trim().split(/\s+/)[0]).filter(Boolean) } catch {}
   const whisperModels:string[]=[]
   for (const dir of [join(homedir(),'.cache/whisper'),join(userData,'models')]) try { for(const f of await readdir(dir)) if(/^ggml-.*\.bin$/.test(f)) whisperModels.push(f.replace(/^ggml-|\.bin$/g,'')) } catch {}
-  const [recommendedWhisper,recommendedChat]=ramGB>=32?['large-v3','llama3.1:8b']:ramGB>=16?['medium.en','llama3.1:8b']:ramGB>=8?['small.en','llama3.2:3b']:['base.en','llama3.2:3b']
-  return {chip:chip||process.arch,ramGB,cores:Number(cores)||1,hasFfmpeg:!!ffmpeg,hasWhisper:!!whisper,hasOllama:!!ollama,ollamaModels,whisperModels,recommendedWhisper,recommendedChat}
+  const recommendedWhisper=ramGB>=32?'large-v3':ramGB>=16?'medium.en':ramGB>=8?'small.en':'base.en'
+  const recommendedChat='llama3.1:8b'
+  const recommendedContext=ramGB>=32?16384:ramGB>=16?8192:ramGB>=8?4096:2048
+  return {chip:chip||process.arch,ramGB,cores:Number(cores)||1,hasFfmpeg:!!ffmpeg,hasWhisper:!!whisper,hasOllama:!!ollama,ollamaModels,whisperModels,recommendedWhisper,recommendedChat,recommendedContext}
 }
 export async function pullWhisper(userData:string,model:string,onProgress:(pct:number)=>void): Promise<void> {
   if(!/^[a-z0-9.-]+$/i.test(model)) throw new Error('Invalid model name')
