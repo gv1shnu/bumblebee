@@ -4,6 +4,21 @@ Reviewer log. Append-only, newest checkpoint on top. Severity: **BLOCKER** (prod
 does not work as designed), **MAJOR** (a stated non-negotiable violated or a design
 intent silently lost), MINOR (correctness/maintenance).
 
+## Ingest bug + dialogue sources — 2026-09-20
+
+- [x] **BLOCKER** ingest.ts cut — the cut filter used leading-dot durations
+      (`stop_duration=.04`, `afade d=.01`/`d=.012`). ffmpeg 7.x rejects these
+      (`Unable to parse "stop_duration" option value ".04"`), so every clip cut failed and
+      no corpus could be built. Caught by replaying the exact ffmpeg command. Fixed to
+      leading-zero (`0.04`, `0.01`, `0.012`); verified a real cut renders.
+- [x] Ingest now accepts audio files (mp3/m4a/aac/flac/wav/ogg/opus/aiff/wma), with a
+      mono-safe downmix so single-channel sources don't break the `pan` filter.
+- [x] When an English subtitle ships with a file (sidecar `.srt` or an English-tagged
+      embedded stream), ingest builds clips from the cues and **skips whisper** entirely.
+      Short cues keep their own timing; longer cues split on sentences with proportional
+      timing, then the existing silence-trim/fades clean the boundaries. Subtitle timing is
+      looser than whisper's word timing — the trade the user asked for.
+
 ## First-run gap — 2026-09-20
 
 - [x] **MAJOR** App.tsx Setup — Setup pulls the recommended models but never persists

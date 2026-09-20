@@ -1,9 +1,22 @@
 # Ingest
 
-Ingest turns a video file into a set of short, clean dialogue clips. This stage decides
-whether anything downstream sounds good — a clip with a click at the front or a laugh
-bleeding into its tail can't be rescued later. The code is in `src/main/ingest.ts`, driven
-from the app or from `npm run ingest -- <file>`.
+Ingest turns a video **or audio** file into a set of short, clean dialogue clips. This
+stage decides whether anything downstream sounds good — a clip with a click at the front or
+a laugh bleeding into its tail can't be rescued later. The code is in `src/main/ingest.ts`,
+driven from the app or from `npm run ingest -- <file>`.
+
+Video (`.mkv .mp4 .mov .m4v .avi .webm`) and audio (`.mp3 .m4a .aac .flac .wav .ogg .opus
+.aiff .wma`) are both scanned. Mono sources are handled without breaking the downmix.
+
+## Subtitles first
+
+Transcription is the slow part. If a file already ships with an English subtitle — a
+sidecar `.srt` next to it, or an English-tagged embedded stream — ingest builds its clips
+straight from the subtitle cues and skips whisper entirely. Short cues keep their own
+timing; longer cues are split on sentence boundaries with time shared out by length. The
+trade is that cue timings are looser than whisper's word timings, so boundaries lean on the
+silence-trim and fades below to stay clean. With no English subtitle, it falls back to
+transcription.
 
 ## The stages
 
