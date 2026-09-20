@@ -1,9 +1,18 @@
 {
   "name": "bumblebee-radio",
-  "version": "0.1.0",
-  "author": "Bumblebee",
+  "version": "0.0.1",
+  "author": "Vishnu Gandarapu",
+  "license": "MIT",
   "private": true,
   "description": "Local film and television dialogue radio for macOS",
+  "homepage": "https://github.com/gv1shnu/bumblebee#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gv1shnu/bumblebee.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gv1shnu/bumblebee/issues"
+  },
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

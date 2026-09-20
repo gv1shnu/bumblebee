@@ -82,3 +82,8 @@ offline to a WAV with a matching SRT of the spoken fragments.
 The chat and embedding models are warmed into memory at startup so the first reply isn't
 slowed by a cold load. The corpus lives in SQLite at `app.getPath('userData')`, with clip
 audio on disk beside it.
+
+## License
+
+[MIT](LICENSE) © Vishnu Gandarapu. The code is MIT-licensed; the dialogue corpus is built
+from your own local media, stays on your machine, and is never part of this project.

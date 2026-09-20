@@ -1,4 +1,5 @@
 import type { Segment } from '../shared/types'
+import { encodeWav, buildSrt, type Mark } from './export'
 
 export const mulberry32=(seed:number)=>()=>{let t=seed+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}
 class BufferCache{private map=new Map<string,{buffer:AudioBuffer;size:number}>();private bytes=0;constructor(private max=120*1024*1024){}get(k:string){const v=this.map.get(k);if(v){this.map.delete(k);this.map.set(k,v)}return v?.buffer}set(k:string,b:AudioBuffer){const size=b.length*b.numberOfChannels*4;this.map.set(k,{buffer:b,size});this.bytes+=size;while(this.bytes>this.max){const [key,v]=this.map.entries().next().value!;this.map.delete(key);this.bytes-=v.size}}}
@@ -58,15 +59,3 @@ type PlanItem =
   | {type:'bed';start:number;dur:number;gain:number}
   | {type:'fx';name:'staticShort'|'staticLong'|'sweep';start:number;dur:number;gain:number}
   | {type:'clip';src:string;start:number;dur:number;q:number;drop?:{d:number;len:number}}
-type Mark={start:number;end:number;text:string}
-
-// Mono 16-bit PCM WAV — small, universally playable, and lossless for a spliced-speech mix.
-function encodeWav(buffer:AudioBuffer):ArrayBuffer{
-  const ch=buffer.getChannelData(0),sr=buffer.sampleRate,n=ch.length,ab=new ArrayBuffer(44+n*2),dv=new DataView(ab)
-  const str=(o:number,s:string)=>{for(let i=0;i<s.length;i++)dv.setUint8(o+i,s.charCodeAt(i))}
-  str(0,'RIFF');dv.setUint32(4,36+n*2,true);str(8,'WAVE');str(12,'fmt ');dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,1,true);dv.setUint32(24,sr,true);dv.setUint32(28,sr*2,true);dv.setUint16(32,2,true);dv.setUint16(34,16,true);str(36,'data');dv.setUint32(40,n*2,true)
-  let o=44;for(let i=0;i<n;i++){const v=Math.max(-1,Math.min(1,ch[i]));dv.setInt16(o,v<0?v*0x8000:v*0x7fff,true);o+=2}
-  return ab
-}
-const srtTime=(sec:number):string=>{const ms=Math.max(0,Math.round(sec*1000)),p=(n:number,l=2)=>String(n).padStart(l,'0');return `${p(Math.floor(ms/3600000))}:${p(Math.floor(ms/60000)%60)}:${p(Math.floor(ms/1000)%60)},${p(ms%1000,3)}`}
-function buildSrt(marks:Mark[]):string{return marks.map((m,i)=>`${i+1}\n${srtTime(m.start)} --> ${srtTime(m.end)}\n${m.text}`).join('\n\n')+'\n'}
