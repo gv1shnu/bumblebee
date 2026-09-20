@@ -33,8 +33,12 @@ async function callModel(model: string, prompt: string, numCtx: number, keepAliv
 export async function generateReply(db: Database.Database, input: string): Promise<ReplyResult> {
   const settings = Object.fromEntries((db.prepare('SELECT k,v FROM settings').all() as Array<{ k: string; v: string }>).map(r => [r.k, JSON.parse(r.v)])) as Partial<Settings>
   const seed = randomInt(0, 0x7fffffff)
-  const rows = db.prepare(`SELECT c.id,c.phrase,c.quality FROM clips c JOIN clips_fts f ON f.rowid=c.rowid WHERE clips_fts MATCH ? AND c.rejected=0 ORDER BY bm25(clips_fts),c.quality DESC LIMIT 400`)
+  let rows = db.prepare(`SELECT c.id,c.phrase,c.quality FROM clips c JOIN clips_fts f ON f.rowid=c.rowid WHERE clips_fts MATCH ? AND c.rejected=0 ORDER BY bm25(clips_fts),c.quality DESC LIMIT 400`)
     .all(input.replace(/[^\w ]/g, ' ').trim().split(/\s+/).filter(Boolean).map(x => `"${x}"`).join(' OR ') || '"nothing"') as Array<{ id: string; phrase: string; quality: number }>
+  // No keyword hits — common when the input's words aren't in the corpus (a different
+  // language, or a small library). Reach for phrases anyway so there is always something
+  // to say and the reply is never silent.
+  if (!rows.length) rows = db.prepare(`SELECT id,phrase,quality FROM clips WHERE rejected=0 ORDER BY RANDOM() LIMIT 400`).all() as Array<{ id: string; phrase: string; quality: number }>
   const fallback = (): ReplyResult => { const picked = rows.slice(0, 4); return { reply: picked.map(r => r.phrase).join(' ') || '…', fragments: picked.map(r => r.id), seed, model: 'local' } }
   if (settings.replyMode === 'local' || !rows.length) return fallback()
 
