@@ -32,8 +32,8 @@
 .terminal .hud { display: flex; flex-wrap: wrap; gap: 18px; margin: 0 0 24px; color: var(--vfd-dim); font: 600 10px 'Barlow Condensed', sans-serif; letter-spacing: .12em; text-transform: uppercase; }
 .terminal .hud b { color: var(--chrome-hi); font-weight: 600; font-variant-numeric: tabular-nums; margin-right: 4px; }
 
-/* Extra bottom row for the credits strip; keeps the tuner/terminal/control-bar rows. */
-main.device { grid-template-rows: 132px minmax(0, 1fr) 70px auto; }
+/* The credits strip is a shell-level footer now, so the device keeps its three rows. */
+main.device { grid-template-rows: 132px minmax(0, 1fr) 70px; height: 100%; }
 .credits { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 7px 5vw; background: #0c0b0a; border-top: 1px solid #29292c; box-shadow: inset 0 1px var(--void); }
 .credits .gh { grid-column: 1; justify-self: start; display: flex; color: var(--chrome); }
 .credits .gh:hover { color: var(--chrome-hi); }
@@ -91,13 +91,57 @@ main.device { box-shadow: inset 0 1px var(--chrome-hi), inset 0 0 0 1px rgba(0, 
 
 @media (prefers-reduced-motion: reduce) { .command::after, .power, .service-nav button, .credits .gh, .credits .by { transition: none; } }
 
-/* Setup and Library are taller than the window — let the shell scroll while the
-   route nav stays pinned. The radio route fills the viewport exactly, so it never
-   shows a scrollbar. */
-.device-shell { overflow-y: auto; }
+/* ============ Setup & Library — matched to the device finish ============ */
+.setup, .library { max-width: 1040px; margin-inline: auto; padding: 60px clamp(28px, 6vw, 76px) 52px; font-family: 'JetBrains Mono', monospace; }
+.setup .eyebrow, .library .eyebrow { color: var(--chrome); font: 600 10px 'Barlow Condensed', sans-serif; letter-spacing: .24em; }
+.setup h1, .library h1 { color: var(--vfd); font: 600 40px/1.05 'Barlow Condensed', sans-serif; letter-spacing: .01em; margin: 6px 0 14px; text-shadow: 0 0 18px rgba(255, 167, 36, .16); }
+.setup h2, .library h2 { color: var(--chrome); font: 600 11px 'Barlow Condensed', sans-serif; letter-spacing: .16em; }
+.setup .lede { color: #8c7c53; max-width: 660px; }
+
+/* Instrument panels: machine spec, checks, corpus stats. */
+.machine, .stats { border: 1px solid #2b2b2f; background: linear-gradient(#161618, #111113); border-radius: 3px; overflow: hidden; }
+.machine div, .stats div { border-right: 1px solid #26262a; }
+.machine span, .stats span { color: var(--chrome); font: 600 9px 'Barlow Condensed', sans-serif; letter-spacing: .18em; }
+.machine b { color: var(--vfd); }
+.stats b { color: var(--vfd); font-variant-numeric: tabular-nums; text-shadow: 0 0 10px rgba(255, 167, 36, .18); }
+.checks div { border: 1px solid #2b2b2f; background: #141416; border-radius: 3px; color: var(--vfd); }
+.checks small { color: var(--chrome); }
+.ok { background: #b3c32a; box-shadow: 0 0 8px #8ea000; }
+.bad { background: var(--signal); box-shadow: 0 0 8px rgba(229, 72, 77, .5); }
+
+/* Model rows, folder picker, review, history. */
+.models, .folder { border-top: 1px solid #26262a; }
+.models > div { border-bottom: 1px solid #1e1e21; }
+.models span { color: var(--chrome); }
+.models em { color: #9aab26; }
+.path { color: var(--chrome); border: 1px dashed #3a3a3f; border-radius: 3px; padding: 12px 14px; transition: border-color .2s ease, color .2s ease; }
+.path:hover { border-color: var(--chrome); color: var(--vfd); }
+.list article { border-bottom: 1px solid #1e1e21; transition: background .18s ease; }
+.list article:hover { background: #141416; }
+.list article > span { color: var(--chrome); }
+.review p { color: var(--vfd); }
+
+/* Buttons and tabs in the device idiom. */
+.setup button:not(.primary), .library button:not(.primary), .models button { background: #1b1b1e; border: 1px solid #3a3a3f; color: var(--vfd); border-radius: 3px; transition: border-color .2s ease, color .2s ease, background .2s ease; }
+.setup button:not(.primary):hover, .library button:not(.primary):hover, .models button:hover { border-color: var(--chrome); background: #212125; }
+.primary { background: linear-gradient(#ffd23f, var(--rally)); color: #12100a; border: 1px solid #ffdf6a; border-radius: 3px; font-weight: 700; letter-spacing: .02em; transition: filter .18s ease, transform .08s ease; }
+.primary:not(:disabled):hover { filter: brightness(1.06); }
+.primary:not(:disabled):active { transform: translateY(1px); }
+.primary:disabled { opacity: .3; }
+.tabs { border-bottom: 1px solid #2b2b2f; }
+.tabs button { color: var(--chrome); transition: color .2s ease, border-color .2s ease; }
+.tabs button:hover { color: var(--chrome-hi); }
+.tabs button.active { color: var(--vfd); border-bottom: 2px solid var(--vfd); }
+progress { accent-color: var(--rally); }
+
+/* Shell is a column: pinned nav, a scrolling route area, and a footer that shows on
+   every page. The radio fills the route area exactly; Setup and Library scroll. */
+.device-shell { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.route-view { flex: 1; min-height: 0; overflow-y: auto; position: relative; }
 .service-nav { position: fixed; }
-.device-shell::-webkit-scrollbar { width: 9px; }
-.device-shell::-webkit-scrollbar-thumb { background: #2a2a2d; border-radius: 4px; }
-.device-shell::-webkit-scrollbar-track { background: transparent; }
+.route-view::-webkit-scrollbar { width: 9px; }
+.route-view::-webkit-scrollbar-thumb { background: #2a2a2d; border-radius: 4px; }
+.route-view::-webkit-scrollbar-track { background: transparent; }
+.credits { flex: 0 0 auto; }
 
 @media (prefers-reduced-motion: reduce) { .bumble-face .eyes { animation: none; } .bumble-face .bar { transition: none; } }
