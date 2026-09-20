@@ -12,7 +12,9 @@ const AUDIO=new Set(['.mp3','.m4a','.aac','.flac','.wav','.ogg','.opus','.aiff',
 const MEDIA=new Set([...VIDEO,...AUDIO])
 type Word={word:string;start:number;end:number;probability:number}
 type Candidate={phrase:string;start:number;end:number;quality:number}
-const id=(prefix:string)=>`${prefix}_${randomBytes(3).toString('hex')}`
+// 8 random bytes (64 bits). The old 3 bytes (~16M) collided within a single file's
+// hundreds of clips — UNIQUE constraint failed on clips.id.
+const id=(prefix:string)=>`${prefix}_${randomBytes(8).toString('hex')}`
 export async function hashFile(path:string):Promise<string>{const h=createHash('sha256');for await(const chunk of createReadStream(path))h.update(chunk as Buffer);return h.digest('hex')}
 export async function scanFolders(folders:string[]):Promise<string[]>{const out:string[]=[];async function walk(p:string){const info=await stat(p);if(info.isFile()){if(MEDIA.has(extname(p).toLowerCase()))out.push(p);return}for(const e of await readdir(p,{withFileTypes:true})){const f=join(p,e.name);if(e.isDirectory())await walk(f);else if(MEDIA.has(extname(e.name).toLowerCase()))out.push(f)}}for(const f of folders)await walk(f);return out.sort()}
 export function cleanSubtitles(raw:string):string[]{
