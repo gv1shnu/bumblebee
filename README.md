@@ -34,6 +34,8 @@ Everything runs locally. Nothing leaves the machine except model downloads you a
 - [`ffmpeg`](https://ffmpeg.org) (with `ffprobe`) — audio extraction and cutting
 - [`whisper-cli`](https://github.com/ggml-org/whisper.cpp) — transcription (`brew install whisper-cpp`)
 - [`ollama`](https://ollama.com) — reply generation, plus `nomic-embed-text` for search
+- Optional: Xcode command-line tools (`swiftc`) — used to build the on-device Speech
+  fallback transcriber. Without them, transcription simply falls back to whisper alone.
 - A whisper model and a chat model — the app recommends and installs the right ones for
   your RAM on first run
 
@@ -62,14 +64,21 @@ typed IPC bridge (`src/shared/ipc.ts`).
 **Ingest** turns your video and audio files into a corpus of short clips. It pulls out the
 dialogue (the centre channel on 5.1, a downmix otherwise), then gets the text: if a file
 already ships an English subtitle it reads the cues and skips transcription, otherwise it
-runs `whisper-cli`. Clean phrases are cut from a 48 kHz master with 10/12 ms fades and
-normalised per source — deliberately leaving a few dB of variance between sources.
+runs `whisper-cli` with automatic language detection. When whisper covers little of a file —
+common with non-English audio — the same clip is handed to macOS's on-device Speech
+recogniser as a second pass, and any phrases whisper missed are added to the corpus. Clean
+phrases are cut from a 48 kHz master with 10/12 ms fades and normalised per source —
+deliberately leaving a few dB of variance between sources. Distinct phrases are embedded
+with `nomic-embed-text` so replies can reach for them by meaning, not just keywords.
 
 **Conversation** turns your message into speech. A cost-based matcher (Viterbi, not greedy)
 covers the text with the clips it has, and the audio engine splices them with tuning static
 and gaps. Every clip passes through one ~1150 Hz band-pass filter — that single line is
 what makes a dozen unrelated recordings sound like one damaged speaker instead of a
 playlist, so it is never optional. All randomness is seeded, so the same reply reproduces
-the same audio exactly.
+the same audio exactly — which is also how **Export** works: it re-renders a finished reply
+offline to a WAV with a matching SRT of the spoken fragments.
 
-The corpus lives in SQLite at `app.getPath('userData')`, with clip audio on disk beside it.
+The chat and embedding models are warmed into memory at startup so the first reply isn't
+slowed by a cold load. The corpus lives in SQLite at `app.getPath('userData')`, with clip
+audio on disk beside it.
