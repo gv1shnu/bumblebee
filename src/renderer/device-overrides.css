@@ -1,3 +1,31 @@
 .command { position: relative; }
 .command i { position: absolute; left: calc(2.25ch + var(--chars) * 1ch); }
 .command input:placeholder-shown + i { left: 2.25ch; }
+
+/* Bumblebee — device optic. Eyes brighten and the grille moves with the audio
+   level from the AnalyserNode; blink is slow and stops for reduced-motion. */
+.bumble-face { position: absolute; top: 10px; right: 4.5vw; width: 58px; height: 46px; z-index: 5; pointer-events: none; overflow: visible; }
+.bumble-face .helmet { fill: #17171a; stroke: var(--chrome); stroke-width: 1.5; }
+.bumble-face .antenna { stroke: var(--chrome); stroke-width: 1.5; stroke-linecap: round; }
+.bumble-face .optic { fill: var(--vfd); }
+.bumble-face .glint { fill: #fff3d6; opacity: .85; }
+.bumble-face .bar { fill: var(--rally); transition: height .08s linear, y .08s linear; }
+.bumble-face .eyes { transform-origin: center; transform-box: fill-box; animation: bumble-blink 5.4s ease-in-out infinite; }
+@keyframes bumble-blink { 0%, 93%, 100% { transform: scaleY(1); } 96.5% { transform: scaleY(.12); } }
+
+/* Restrained glow polish — additive, palette-consistent. */
+.device .needle { box-shadow: 0 0 7px rgba(242, 192, 7, .5); }
+.device .station-plate { text-shadow: 0 0 8px rgba(255, 167, 36, .22); transition: color .3s, text-shadow .3s; }
+.device .reply-line .fragment.speaking { text-shadow: 0 0 10px rgba(255, 167, 36, .5); }
+.device .meter i.lit { box-shadow: 0 0 5px rgba(242, 192, 7, .55), inset 0 1px var(--panel-lit); }
+
+/* Number/help styling for the new settings controls. */
+.settings input[type=number] { background: #100d08; border: 1px solid #3d2d10; color: #d9a51f; padding: 8px; width: 120px; }
+.settings small { color: #6a5730; font-size: 9px; letter-spacing: .04em; }
+.settings select { background: #100d08; border: 1px solid #3d2d10; color: #d9a51f; padding: 8px; }
+.folder .gate { width: 100%; color: #b5842a; font-size: 10px; letter-spacing: .04em; }
+
+/* Home-screen one-line intro, shown only when the radio is idle and empty. */
+.terminal .intro { margin: 0 0 26px; max-width: 46ch; color: var(--vfd-dim); font-size: 12px; line-height: 1.6; letter-spacing: .02em; }
+
+@media (prefers-reduced-motion: reduce) { .bumble-face .eyes { animation: none; } .bumble-face .bar { transition: none; } }

@@ -14,6 +14,32 @@ const frequencyLabel = (source: Source): string => `${source.label} ${frequencyF
 type Phase = 'idle' | 'thinking' | 'playing'
 type ClockState = { now: number; needle: number; level: number; flicker: boolean; active: number }
 
+// Uneven per-bar weights so the mouth grille never moves as one clean block —
+// it mirrors the deliberate unevenness of the spliced voice.
+const MOUTH = [0.55, 0.85, 0.68, 1, 0.62, 0.82, 0.5]
+function BumblebeeFace({ level, speaking }: { level: number; speaking: boolean }) {
+  const drive = speaking ? level : level * 0.35
+  const glow = 0.42 + Math.min(0.58, drive * 0.95)
+  return (
+    <svg className="bumble-face" viewBox="0 0 76 60" aria-hidden="true">
+      <path className="antenna" d="M25 8 L21 0 M51 8 L55 0" />
+      <path className="helmet" d="M14 20 Q14 8 27 7 L49 7 Q62 8 62 20 L62 39 Q62 51 49 52 L27 52 Q14 51 14 39 Z" />
+      <g className="eyes" style={{ opacity: glow, filter: `drop-shadow(0 0 ${(glow * 3).toFixed(1)}px var(--vfd))` }}>
+        <circle className="optic" cx="28" cy="25" r="7" />
+        <circle className="optic" cx="48" cy="25" r="7" />
+        <circle className="glint" cx="30.5" cy="22.5" r="1.9" />
+        <circle className="glint" cx="50.5" cy="22.5" r="1.9" />
+      </g>
+      <g className="mouth">
+        {MOUTH.map((weight, index) => {
+          const height = 2 + drive * weight * (speaking ? 10 : 3)
+          return <rect key={index} className="bar" x={22.5 + index * 4.6} y={45 - height} width="3" height={Math.max(1.5, height)} rx="1" />
+        })}
+      </g>
+    </svg>
+  )
+}
+
 export function DeviceRadio({ sources }: { sources: Source[] }) {
   const engine = useMemo(() => new RadioEngine(), [])
   const [input, setInput] = useState('')
@@ -108,6 +134,7 @@ export function DeviceRadio({ sources }: { sources: Source[] }) {
     <div className="surface grain" aria-hidden="true" />
     <div className="surface scanlines" aria-hidden="true" />
     <section className="tuner" aria-label="Tuning band">
+      <BumblebeeFace level={clock.level} speaking={phase === 'playing' && clock.active >= 0} />
       <div className="tuner-title">TUNING BAND <span>FM</span></div>
       <div className="scale">
         {Array.from({ length: 41 }, (_, index) => {
@@ -127,6 +154,7 @@ export function DeviceRadio({ sources }: { sources: Source[] }) {
 
     <section className="terminal" aria-live="polite">
       <p className="user-line"><span>&gt;</span> {submitted || 'receiver standing by'}</p>
+      {phase === 'idle' && segments.length === 0 && <p className="intro">Bumblebee Radio — it answers only in fragments of dialogue spliced from films and television you own.</p>}
       <div className="reply-line">
         {segments.map((segment, index) => {
           const start = segment.audioStart ?? Infinity
