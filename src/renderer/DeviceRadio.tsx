@@ -12,7 +12,7 @@ const positionFor = (id: string): number => ((frequencyFor(id) - 88) / 20) * 100
 const frequencyLabel = (source: Source): string => `${source.label} ${frequencyFor(source.id).toFixed(1)}`
 
 type Phase = 'idle' | 'thinking' | 'playing'
-type ClockState = { now: number; needle: number; level: number; flicker: boolean; active: number }
+type ClockState = { now: number; needle: number; level: number; flicker: boolean; active: number; spectrum: number[] }
 
 // Uneven per-bar weights so the mouth grille never moves as one clean block —
 // it mirrors the deliberate unevenness of the spliced voice.
@@ -49,7 +49,7 @@ export function DeviceRadio({ sources, stats }: { sources: Source[]; stats?: Cor
   const [freeSpeak, setFreeSpeak] = useState(false)
   const [latency, setLatency] = useState<number>()
   const [seed, setSeed] = useState<number>()
-  const [clock, setClock] = useState<ClockState>({ now: 0, needle: 50, level: 0, flicker: false, active: -1 })
+  const [clock, setClock] = useState<ClockState>({ now: 0, needle: 50, level: 0, flicker: false, active: -1, spectrum: [] })
   const raf = useRef(0)
   const physics = useRef({ position: 50, velocity: 0, last: 0, level: 0, nextFlicker: 9 })
   const analyserData = useRef(new Uint8Array(engine.analyser.frequencyBinCount))
@@ -92,15 +92,20 @@ export function DeviceRadio({ sources, stats }: { sources: Source[]; stats?: Cor
         state.position += state.velocity * delta
       }
       engine.analyser.getByteFrequencyData(analyserData.current)
-      const raw = analyserData.current.reduce((sum, value) => sum + value, 0) / analyserData.current.length / 255
+      const bins = analyserData.current
+      const raw = bins.reduce((sum, value) => sum + value, 0) / bins.length / 255
       state.level = raw > state.level ? raw : Math.max(raw, state.level - delta / 0.3)
+      const BANDS = 28
+      const usable = Math.min(bins.length, 360)
+      const per = Math.max(1, Math.floor(usable / BANDS))
+      const spectrum = Array.from({ length: BANDS }, (_, k) => { let s = 0; for (let j = 0; j < per; j++) s += bins[k * per + j]; return s / per / 255 })
       let flicker = false
       if (!reduced.current && now >= state.nextFlicker) {
         flicker = true
         const seeded = mulberry32(Math.floor(state.nextFlicker * 1000))
         state.nextFlicker = now + 8 + seeded() * 12
       }
-      setClock({ now, needle: state.position, level: state.level, flicker, active })
+      setClock({ now, needle: state.position, level: state.level, flicker, active, spectrum })
       raf.current = requestAnimationFrame(tick)
     }
     raf.current = requestAnimationFrame(tick)
@@ -188,6 +193,8 @@ export function DeviceRadio({ sources, stats }: { sources: Source[]; stats?: Cor
       {phase === 'idle' && segments.length > 0 && <div className="reply-actions"><button type="button" className="replay" onClick={replay} disabled={seed == null}>↻ Replay</button></div>}
       <p className="station-plate">{phase === 'thinking' ? 'SCANNING…' : activeSource ? `▮ ${frequencyLabel(activeSource)} · ${activeSource.title}` : '▯ BAND OPEN'}</p>
     </section>
+
+    <div className="spectrum" aria-hidden="true">{clock.spectrum.map((v, i) => <i key={i} style={{ width: `${Math.max(4, v * 100)}%`, opacity: 0.2 + v * 0.8 }} />)}</div>
 
     <form className="control-bar" onSubmit={transmit}>
       <div className="meter" aria-label={`Signal ${lit} of 8`}><div>{Array.from({ length: 8 }, (_, i) => <i key={i} className={i < lit ? 'lit' : i === 7 && lit === 8 ? 'clip' : ''} />)}</div><b>SIG</b></div>
