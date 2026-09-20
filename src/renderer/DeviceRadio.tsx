@@ -48,6 +48,7 @@ export function DeviceRadio({ sources, stats }: { sources: Source[]; stats?: Cor
   const [phase, setPhase] = useState<Phase>('idle')
   const [freeSpeak, setFreeSpeak] = useState(false)
   const [latency, setLatency] = useState<number>()
+  const [seed, setSeed] = useState<number>()
   const [clock, setClock] = useState<ClockState>({ now: 0, needle: 50, level: 0, flicker: false, active: -1 })
   const raf = useRef(0)
   const physics = useRef({ position: 50, velocity: 0, last: 0, level: 0, nextFlicker: 9 })
@@ -121,8 +122,15 @@ export function DeviceRadio({ sources, stats }: { sources: Source[]; stats?: Cor
     const matched = await matchText(result.reply)
     setLatency(Math.round(performance.now() - started))
     setSegments(matched)
+    setSeed(result.seed)
     await engine.play(matched, result.seed)
     setPhase('playing')
+  }
+
+  const replay = async () => {
+    if (phase !== 'idle' || !segments.length || seed == null) return
+    setPhase('playing')
+    await engine.play(segments, seed)
   }
 
   useEffect(() => {
@@ -176,6 +184,7 @@ export function DeviceRadio({ sources, stats }: { sources: Source[]; stats?: Cor
         })}
         {phase === 'idle' && segments.length === 0 && <span className="ghost">NO CARRIER</span>}
       </div>
+      {phase === 'idle' && segments.length > 0 && <div className="reply-actions"><button type="button" className="replay" onClick={replay} disabled={seed == null}>↻ Replay</button></div>}
       <p className="station-plate">{phase === 'thinking' ? 'SCANNING…' : activeSource ? `▮ ${frequencyLabel(activeSource)} · ${activeSource.title}` : '▯ BAND OPEN'}</p>
     </section>
 
