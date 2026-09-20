@@ -40,4 +40,55 @@ main.device { grid-template-rows: 132px minmax(0, 1fr) 70px auto; }
 .credits .by { grid-column: 2; color: var(--vfd-dim); text-decoration: none; font: 600 10px 'Barlow Condensed', sans-serif; letter-spacing: .12em; text-transform: uppercase; }
 .credits .by:hover { color: var(--vfd); }
 
+/* ===================== Professional polish pass ===================== */
+* { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+
+/* The unit reads as one machined object — deeper drop, crisper bezel. */
+main.device { box-shadow: inset 0 1px var(--chrome-hi), inset 0 0 0 1px rgba(0, 0, 0, .45), inset 0 -1px var(--void), 0 34px 90px rgba(0, 0, 0, .55); }
+
+/* Tuner: warm backlit band and a needle that reads as lit glass. */
+.tuner { background: linear-gradient(#1f1f22, #121214 72%, #0e0e10); }
+.scale { background: linear-gradient(180deg, rgba(242, 192, 7, .05), transparent 62%); }
+.scale > i.major { box-shadow: 0 0 6px rgba(168, 171, 178, .35); }
+.scale > i b { text-shadow: 0 0 8px rgba(168, 171, 178, .22); }
+.needle { width: 2px; background: linear-gradient(180deg, #ffd23f, var(--rally) 45%, #cf9d1c); border-radius: 2px; box-shadow: 0 0 11px rgba(242, 192, 7, .7), 0 0 3px rgba(255, 245, 214, .5); }
+.needle span { top: -8px; left: -6px; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 9px solid var(--rally); filter: drop-shadow(0 0 4px rgba(242, 192, 7, .65)); }
+.station-tick.active { text-shadow: 0 0 8px rgba(242, 192, 7, .45); }
+
+/* Terminal: soft top light, calmer reply rhythm. */
+.terminal { background: radial-gradient(130% 100% at 50% 0%, #100e0c, var(--void) 68%); }
+.reply-line { line-height: 1.5; letter-spacing: .01em; }
+.terminal::-webkit-scrollbar { width: 8px; }
+.terminal::-webkit-scrollbar-thumb { background: #2a2a2d; border-radius: 4px; }
+.terminal::-webkit-scrollbar-track { background: transparent; }
+
+/* HUD: an instrument readout — divider-ruled, amber values that glow. */
+.terminal .hud { gap: 0; align-items: baseline; padding-bottom: 15px; margin-bottom: 26px; border-bottom: 1px solid rgba(168, 171, 178, .09); }
+.terminal .hud span { padding: 0 16px; border-right: 1px solid rgba(168, 171, 178, .13); }
+.terminal .hud span:first-child { padding-left: 0; }
+.terminal .hud span:last-child { border-right: 0; padding-right: 0; }
+.terminal .hud b { color: var(--vfd); text-shadow: 0 0 8px rgba(255, 167, 36, .25); }
+
+/* Control bar: focus glow under the command, tactile power key. */
+.control-bar { background: linear-gradient(#1c1c1f, #141416); }
+.command::after { content: ""; position: absolute; left: 0; right: 0; bottom: 6px; height: 1px; background: linear-gradient(90deg, transparent, rgba(242, 192, 7, .5), transparent); opacity: 0; transition: opacity .25s ease; }
+.command:focus-within::after { opacity: 1; }
+.meter i.lit { background: linear-gradient(180deg, #ffd23f, var(--rally)); }
+.power { border-radius: 50%; transition: color .2s ease, transform .08s ease; }
+.power:not(:disabled):hover { color: var(--rally); }
+.power:not(:disabled):active { transform: scale(.92); }
+
+/* Nav + links: quiet, consistent motion. */
+.service-nav button { transition: color .2s ease, border-color .2s ease, background .2s ease; }
+.service-nav button:hover { color: var(--chrome-hi); }
+.service-nav button.active { background: linear-gradient(#26262a, #1a1a1d); }
+
+/* Credits: title-case attribution, refined hover. */
+.credits { padding: 9px 5vw; background: linear-gradient(#0e0d0c, #090807); }
+.credits .gh { transition: color .2s ease, transform .15s ease; }
+.credits .gh:hover { transform: translateY(-1px); }
+.credits .by { text-transform: none; letter-spacing: .05em; font-size: 11px; transition: color .2s ease; }
+
+@media (prefers-reduced-motion: reduce) { .command::after, .power, .service-nav button, .credits .gh, .credits .by { transition: none; } }
+
 @media (prefers-reduced-motion: reduce) { .bumble-face .eyes { animation: none; } .bumble-face .bar { transition: none; } }
