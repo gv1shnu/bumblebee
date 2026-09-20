@@ -6,6 +6,8 @@ import type Database from 'better-sqlite3'
 import type { IngestProgress } from '../shared/types'
 import { phraseKey } from '../shared/normalize'
 import { findBinary, run } from './process'
+import { embedBatch } from './ollama'
+import { storeEmbeddings } from './db'
 
 const VIDEO=new Set(['.mkv','.mp4','.mov','.m4v','.avi','.webm'])
 const AUDIO=new Set(['.mp3','.m4a','.aac','.flac','.wav','.ogg','.opus','.aiff','.aif','.wma'])
@@ -89,10 +91,16 @@ export class Ingestor{
     let spans:Candidate[]
     const subtitle=await englishSubtitle(file,work,probe,ffmpeg)
     if(subtitle){this.emit(job,'subtitles',file,index,total,45,'Reading English subtitles');spans=subtitleCandidates(parseCues(subtitle))}
-    else{const whisper=await findBinary('whisper-cli');if(!whisper)throw new Error('whisper-cli is required when no English subtitle is present');const wav=join(work,'whisper.wav');await run(ffmpeg,['-i',master,'-ar','16000','-ac','1','-y',wav]);const jsonPath=join(work,'whisper.json');try{await stat(jsonPath)}catch{this.emit(job,'align',file,index,total,35,'Transcribing and aligning');const settings=Object.fromEntries((this.db.prepare('SELECT k,v FROM settings').all() as Array<{k:string;v:string}>).map(r=>[r.k,JSON.parse(r.v)]));const model=settings.whisperModel||'base.en';const modelPath=join(this.userData,'models',`ggml-${model}.bin`);await run(whisper,['-m',modelPath,'-f',wav,'-ojf','-owts','-of',join(work,'whisper')]);await writeFile(jsonPath,await readFile(join(work,'whisper.json')))}spans=candidates(flattenWhisper(JSON.parse(await readFile(jsonPath,'utf8'))))}
+    else{const whisper=await findBinary('whisper-cli');if(!whisper)throw new Error('whisper-cli is required when no English subtitle is present');const wav=join(work,'whisper.wav');await run(ffmpeg,['-i',master,'-ar','16000','-ac','1','-y',wav]);const jsonPath=join(work,'whisper.json');try{await stat(jsonPath)}catch{this.emit(job,'align',file,index,total,35,'Transcribing and aligning');const settings=Object.fromEntries((this.db.prepare('SELECT k,v FROM settings').all() as Array<{k:string;v:string}>).map(r=>[r.k,JSON.parse(r.v)]));const model=settings.whisperModel||'base.en';const modelPath=join(this.userData,'models',`ggml-${model}.bin`);await run(whisper,['-m',modelPath,'-l','auto','-f',wav,'-ojf','-owts','-of',join(work,'whisper')]);await writeFile(jsonPath,await readFile(join(work,'whisper.json')))}spans=candidates(flattenWhisper(JSON.parse(await readFile(jsonPath,'utf8'))))}
     this.emit(job,'segment',file,index,total,55,'Finding clean phrases');const sourceGain=(Number.parseInt(hash.slice(0,2),16)/255*6)-3
     const insertSource=this.db.prepare('INSERT INTO sources(id,label,title,era,kind,path,hash,ingestedAt) VALUES(?,?,?,?,?,?,?,?)');const insertClip=this.db.prepare('INSERT INTO clips(id,phrase,phraseKey,dur,sourceId,quality,file) VALUES(?,?,?,?,?,?,?)')
     const rows: Array<[string,Candidate,string]>=[];for(let i=0;i<spans.length;i++){if(this.cancelled.has(job))return;const c=spans[i],clipId=id('c'),out=join(clipDir,`${clipId}.flac`);this.emit(job,'cut',file,index,total,60+Math.round(35*i/Math.max(1,spans.length)),`Cutting ${i+1} of ${spans.length}`);await run(ffmpeg,['-ss',String(Math.max(0,c.start-.04)),'-to',String(c.end+.04),'-i',master,'-af',`silenceremove=start_periods=1:start_duration=0:start_threshold=-48dB:stop_periods=-1:stop_duration=0.04:stop_threshold=-48dB,afade=t=in:d=0.01,afade=t=out:st=${Math.max(.01,c.end-c.start+.068)}:d=0.012,loudnorm=I=${-18+sourceGain}:TP=-2:LRA=7`,'-ar','48000','-ac','1','-y',out]);rows.push([clipId,c,out])}
     this.db.transaction(()=>{insertSource.run(sourceId,stem.slice(0,4).toUpperCase(),stem,0,'film',file,hash,new Date().toISOString());for(const [clipId,c,out] of rows)insertClip.run(clipId,c.phrase,phraseKey(c.phrase),c.end-c.start,sourceId,c.quality,out)})()
+    // Embed the new phrases for semantic search — best effort (needs ollama + nomic-embed-text).
+    try {
+      const keys=[...new Set(rows.map(([,c])=>phraseKey(c.phrase)).filter(Boolean))]
+      const need=keys.filter(k=>!this.db.prepare('SELECT 1 FROM phrase_vec WHERE phraseKey=?').get(k))
+      for(let i=0;i<need.length;i+=32){if(this.cancelled.has(job))break;const batch=need.slice(i,i+32);this.emit(job,'embed',file,index,total,96,'Embedding phrases');const vecs=await embedBatch(batch);storeEmbeddings(this.db,batch.flatMap((k,j)=>vecs[j]?[{phraseKey:k,vec:vecs[j]!}]:[]))}
+    } catch { /* embeddings are optional */ }
   }
 }

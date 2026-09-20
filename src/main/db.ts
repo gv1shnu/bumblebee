@@ -69,3 +69,31 @@ export class CorpusDb {
     return (this.db.prepare('SELECT * FROM utterances ORDER BY createdAt DESC LIMIT ? OFFSET ?').all(Math.max(1,Math.min(500,limit)),Math.max(0,offset)) as Array<Omit<Utterance,'fragments'> & {fragments:string}>).map(x=>({...x,fragments:JSON.parse(x.fragments)}))
   }
 }
+
+// --- Phrase embeddings (semantic search) ---------------------------------------------
+// Stored as Float32 BLOBs in phrase_vec. Search is brute-force cosine in JS — a few ms
+// over thousands of phrases — which also covers the case where sqlite-vec didn't load.
+
+export function storeEmbeddings(db: Database.Database, entries: Array<{ phraseKey: string; vec: number[] }>): void {
+  if (!entries.length) return
+  const stmt = db.prepare('INSERT OR REPLACE INTO phrase_vec(phraseKey,embedding) VALUES(?,?)')
+  db.transaction(() => { for (const e of entries) stmt.run(e.phraseKey, Buffer.from(new Float32Array(e.vec).buffer)) })()
+}
+
+export function phrasesNeedingEmbeddings(db: Database.Database, limit: number): string[] {
+  return (db.prepare('SELECT DISTINCT phraseKey FROM clips WHERE rejected=0 AND phraseKey NOT IN (SELECT phraseKey FROM phrase_vec) LIMIT ?').all(limit) as Array<{ phraseKey: string }>).map(r => r.phraseKey)
+}
+
+export function nearestPhraseKeys(db: Database.Database, vec: number[], k: number): string[] {
+  const rows = db.prepare('SELECT phraseKey,embedding FROM phrase_vec').all() as Array<{ phraseKey: string; embedding: Buffer }>
+  if (!rows.length) return []
+  const q = Float32Array.from(vec); let qn = 0; for (let i = 0; i < q.length; i++) qn += q[i] * q[i]; qn = Math.sqrt(qn) || 1
+  const scored = rows.map(r => {
+    const b = r.embedding; const e = new Float32Array(b.buffer, b.byteOffset, Math.floor(b.byteLength / 4))
+    const n = Math.min(e.length, q.length); let dot = 0, en = 0
+    for (let i = 0; i < n; i++) { dot += q[i] * e[i]; en += e[i] * e[i] }
+    return { phraseKey: r.phraseKey, score: dot / ((Math.sqrt(en) || 1) * qn) }
+  })
+  scored.sort((a, b) => b.score - a.score)
+  return scored.slice(0, k).map(s => s.phraseKey)
+}

@@ -5,7 +5,8 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { IPC } from '../shared/ipc'
 import type { Utterance } from '../shared/types'
-import { CorpusDb } from './db'
+import { CorpusDb, phrasesNeedingEmbeddings, storeEmbeddings } from './db'
+import { warmChat, warmEmbed, embedBatch } from './ollama'
 import { Ingestor } from './ingest'
 import { generateReply } from './reply'
 import { detect, ensureFx, pullWhisper } from './setup'
@@ -26,4 +27,10 @@ function register(userData:string){
   ipcMain.handle(IPC.exportWrite,async(_,bytes:ArrayBuffer,ext:string,slug:string,srt?:string)=>{const settings=corpus.settings(),folder=settings.exportFolder||app.getPath('music');await mkdir(folder,{recursive:true});const now=new Date(),safe=slug.replace(/[^a-z0-9-_]+/gi,'-').slice(0,64),base=settings.filenamePattern.replace('{date}',now.toISOString().slice(0,10)).replace('{time}',now.toTimeString().slice(0,8).replace(/:/g,'-')).replace('{slug}',safe);const path=join(folder,`${base}.${ext}`);await writeFile(path,Buffer.from(bytes));if(srt&&settings.exportSrt)await writeFile(join(folder,`${base}.srt`),srt);return path})
 }
 async function createWindow(){mainWindow=new BrowserWindow({width:1180,height:760,minWidth:720,minHeight:560,backgroundColor:'#0a0a0b',titleBarStyle:'hiddenInset',webPreferences:{preload:join(__dirname,'../preload/index.js'),contextIsolation:true,nodeIntegration:false,sandbox:true}});mainWindow.webContents.setWindowOpenHandler(({url})=>{if(/^https?:\/\//.test(url))void shell.openExternal(url);return{action:'deny'}});if(process.env.ELECTRON_RENDERER_URL)await mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);else await mainWindow.loadFile(join(__dirname,'../renderer/index.html'))}
-app.whenReady().then(async()=>{if(process.platform==='darwin'){const icon=join(app.getAppPath(),'build','icon.png');if(existsSync(icon))app.dock?.setIcon(icon)}const userData=app.getPath('userData');corpus=new CorpusDb(join(userData,'corpus.db'));ingestor=new Ingestor(corpus.db,userData,p=>sender(IPC.ingestProgress,p));register(userData);await ensureFx(userData);await createWindow();app.on('activate',()=>{if(BrowserWindow.getAllWindows().length===0)void createWindow()})});app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit()})
+async function warmAndBackfill(){try{
+  const s=corpus.settings()
+  if(s.replyMode!=='local')await warmChat(s.chatModel||'llama3.1:8b',Number(s.keepAlive)||5)
+  await warmEmbed()
+  for(;;){const need=phrasesNeedingEmbeddings(corpus.db,64);if(!need.length)break;const vecs=await embedBatch(need);const entries=need.flatMap((k,i)=>vecs[i]?[{phraseKey:k,vec:vecs[i]!}]:[]);if(!entries.length)break;storeEmbeddings(corpus.db,entries)}
+}catch(e){console.warn('warm/backfill failed',e)}}
+app.whenReady().then(async()=>{if(process.platform==='darwin'){const icon=join(app.getAppPath(),'build','icon.png');if(existsSync(icon))app.dock?.setIcon(icon)}const userData=app.getPath('userData');corpus=new CorpusDb(join(userData,'corpus.db'));ingestor=new Ingestor(corpus.db,userData,p=>sender(IPC.ingestProgress,p));register(userData);await ensureFx(userData);warmAndBackfill();await createWindow();app.on('activate',()=>{if(BrowserWindow.getAllWindows().length===0)void createWindow()})});app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit()})
