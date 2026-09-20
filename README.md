@@ -37,10 +37,22 @@ First launch opens **Setup**: it checks for the three binaries, recommends model
 Mac, and lets you point the receiver at a folder of media. Once a clip or two exists, the
 **Radio** screen is where you talk to it.
 
-## How it's put together
+## How it works
 
-Two loops and one boundary. Ingest turns your video files into a corpus of short clips;
-the conversation loop turns your message into spliced speech. The renderer never touches
-Node — everything crosses a single typed IPC bridge. See [docs/architecture.md](docs/architecture.md)
-for the map, [docs/ingest.md](docs/ingest.md) for how clips are made, and
-[docs/audio-design.md](docs/audio-design.md) for why the radio sounds the way it does.
+Two loops and one boundary. The renderer never touches Node — everything crosses a single
+typed IPC bridge (`src/shared/ipc.ts`).
+
+**Ingest** turns your video and audio files into a corpus of short clips. It pulls out the
+dialogue (the centre channel on 5.1, a downmix otherwise), then gets the text: if a file
+already ships an English subtitle it reads the cues and skips transcription, otherwise it
+runs `whisper-cli`. Clean phrases are cut from a 48 kHz master with 10/12 ms fades and
+normalised per source — deliberately leaving a few dB of variance between sources.
+
+**Conversation** turns your message into speech. A cost-based matcher (Viterbi, not greedy)
+covers the text with the clips it has, and the audio engine splices them with tuning static
+and gaps. Every clip passes through one ~1150 Hz band-pass filter — that single line is
+what makes a dozen unrelated recordings sound like one damaged speaker instead of a
+playlist, so it is never optional. All randomness is seeded, so the same reply reproduces
+the same audio exactly.
+
+The corpus lives in SQLite at `app.getPath('userData')`, with clip audio on disk beside it.
