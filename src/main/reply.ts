@@ -15,7 +15,13 @@ const task = (input: string, phrases: string[], invalid?: string[]) =>
 
 // Context window sized to host RAM when the user leaves it on auto (0). Larger
 // windows cost proportionally more memory, so this is the memory-management dial.
-const autoContext = (): number => { const gb = totalmem() / 1073741824; return gb >= 32 ? 16384 : gb >= 16 ? 8192 : gb >= 8 ? 4096 : 2048 }
+// The prompt is bounded (persona + at most PHRASE_CAP phrases ≈ a couple thousand tokens),
+// so a huge window just wastes load time and memory. Scale modestly with RAM; users who
+// want a larger window can still set contextLength explicitly.
+const autoContext = (): number => { const gb = totalmem() / 1073741824; return gb >= 16 ? 8192 : gb >= 8 ? 4096 : 2048 }
+// The context a reply will use — shared with warm-up so the model is loaded at the same
+// size and the first reply doesn't pay for a reload. Explicit contextLength wins over auto.
+export const replyContext = (contextLength?: number): number => Number(contextLength) > 0 ? Number(contextLength) : autoContext()
 
 // How many distinct phrases to offer the model. Enough to give real choice, few enough
 // that the prompt stays small and the reply comes back quickly.
@@ -28,7 +34,10 @@ async function callModel(model: string, prompt: string, numCtx: number, keepAliv
   try {
     const res = await fetch('http://127.0.0.1:11434/api/generate', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model, prompt, stream: false, keep_alive: keepAlive, options: { num_ctx: numCtx, temperature: 0.7 } })
+      // format:json makes the model emit a valid object and STOP; num_predict is a hard
+      // ceiling. Without these an 8B model can run away for thousands of tokens on a
+      // phrase-list prompt — minutes of generation for a reply that needs ~20 tokens.
+      body: JSON.stringify({ model, prompt, stream: false, format: 'json', keep_alive: keepAlive, options: { num_ctx: numCtx, num_predict: 220, temperature: 0.4, stop: ['\n\n'] } })
     })
     if (res.ok) { const data = await res.json() as { response?: string }; if (typeof data.response === 'string') return data.response }
   } catch { /* server down — try the CLI */ }
@@ -65,7 +74,7 @@ export async function generateReply(db: Database.Database, input: string): Promi
   if (settings.replyMode === 'local' || !rows.length) return fallback()
 
   const model = settings.chatModel || 'llama3.1:8b'
-  const numCtx = Number(settings.contextLength) > 0 ? Number(settings.contextLength) : autoContext()
+  const numCtx = replyContext(settings.contextLength)
   const keepAlive = `${Math.max(0, Number(settings.keepAlive ?? 5))}m`
   const preprompt = settings.persona === false ? '' : `${PERSONA}\n\n`
   const phrases = [...new Set(rows.map(r => r.phrase))]

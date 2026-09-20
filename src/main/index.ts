@@ -8,7 +8,7 @@ import type { Utterance } from '../shared/types'
 import { CorpusDb, phrasesNeedingEmbeddings, storeEmbeddings } from './db'
 import { warmChat, warmEmbed, embedBatch } from './ollama'
 import { Ingestor } from './ingest'
-import { generateReply } from './reply'
+import { generateReply, replyContext } from './reply'
 import { detect, ensureFx, pullWhisper } from './setup'
 import { ensureSpeechHelper } from './speech'
 import { findBinary, run } from './process'
@@ -30,7 +30,7 @@ function register(userData:string){
 async function createWindow(){mainWindow=new BrowserWindow({width:1180,height:760,minWidth:720,minHeight:560,backgroundColor:'#0a0a0b',titleBarStyle:'hiddenInset',webPreferences:{preload:join(__dirname,'../preload/index.js'),contextIsolation:true,nodeIntegration:false,sandbox:true}});mainWindow.webContents.setWindowOpenHandler(({url})=>{if(/^https?:\/\//.test(url))void shell.openExternal(url);return{action:'deny'}});if(process.env.ELECTRON_RENDERER_URL)await mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);else await mainWindow.loadFile(join(__dirname,'../renderer/index.html'))}
 async function warmAndBackfill(){try{
   const s=corpus.settings()
-  if(s.replyMode!=='local')await warmChat(s.chatModel||'llama3.1:8b',Number(s.keepAlive)||5)
+  if(s.replyMode!=='local')await warmChat(s.chatModel||'llama3.1:8b',Number(s.keepAlive)||5,replyContext(s.contextLength))
   await warmEmbed()
   for(;;){const need=phrasesNeedingEmbeddings(corpus.db,64);if(!need.length)break;const vecs=await embedBatch(need);const entries=need.flatMap((k,i)=>vecs[i]?[{phraseKey:k,vec:vecs[i]!}]:[]);if(!entries.length)break;storeEmbeddings(corpus.db,entries)}
 }catch(e){console.warn('warm/backfill failed',e)}}

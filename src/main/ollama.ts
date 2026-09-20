@@ -17,9 +17,10 @@ export async function embedOne(input: string): Promise<number[] | null> {
   return (await embedBatch([input]))[0] ?? null
 }
 
-// Load a chat model into memory (empty generate just loads it) and hold it there.
-export async function warmChat(model: string, keepAliveMin: number): Promise<void> {
-  try { await fetch(`${HOST}/api/generate`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model, keep_alive: `${Math.max(1, keepAliveMin)}m` }) }) } catch { /* best effort */ }
+// Load a chat model into memory (empty generate just loads it) and hold it there. Load at
+// the same num_ctx replies will use, so the first real reply doesn't trigger a reload.
+export async function warmChat(model: string, keepAliveMin: number, numCtx: number): Promise<void> {
+  try { await fetch(`${HOST}/api/generate`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model, keep_alive: `${Math.max(1, keepAliveMin)}m`, options: { num_ctx: numCtx } }) }) } catch { /* best effort */ }
 }
 
 export async function warmEmbed(): Promise<void> {
