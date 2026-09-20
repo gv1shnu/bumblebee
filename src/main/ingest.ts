@@ -20,8 +20,19 @@ export function cleanSubtitles(raw:string):string[]{
     .map(x=>x.replace(/<[^>]+>/g,'').replace(/\[[^\]]*]|\([^)]*(music|laugh|door|noise)[^)]*\)/gi,'').replace(/^\s*[A-Z][A-Z ]{1,24}:\s*/,'').replace(/\s+/g,' ').trim()).filter(Boolean)
   const merged:string[]=[];for(const line of lines){if(merged.length&&!/[.!?]$/.test(merged.at(-1)!)&&/^[a-z]/.test(line))merged[merged.length-1]+=` ${line}`;else merged.push(line)}return merged
 }
-function flattenWhisper(json:any):Word[]{const segments=json.transcription??json.segments??[];return segments.flatMap((s:any)=>(s.tokens??s.words??[]).filter((w:any)=>w.text??w.word).map((w:any)=>({word:String(w.text??w.word).trim(),start:Number(w.offsets?.from??w.start??0)/((w.offsets?.from??0)>100?1000:1),end:Number(w.offsets?.to??w.end??0)/((w.offsets?.to??0)>100?1000:1),probability:Number(w.p??w.probability??.8)}))).filter((w:Word)=>w.word)}
-export function candidates(words:Word[]):Candidate[]{const best=new Map<string,Candidate[]>();for(let i=0;i<words.length;i++)for(let n=1;n<=8&&i+n<=words.length;n++){const span=words.slice(i,i+n);const start=span[0].start,end=span.at(-1)!.end,dur=end-start;if(Math.min(...span.map(w=>w.probability))<.65||(n===1&&(dur<.09||dur>2))||span.some((w,j)=>j>0&&w.start-span[j-1].end>.6))continue;const phrase=span.map(w=>w.word).join(' ').replace(/\s+([,.!?])/g,'$1').trim(),key=phraseKey(phrase);if(!key)continue;const confidence=span.reduce((a,w)=>a+w.probability,0)/n;const quality=Math.max(0,Math.min(1,.72*confidence+.28*Math.min(1,dur/(n*.22))));const c={phrase,start,end,quality};const arr=best.get(key)??[];arr.push(c);arr.sort((a,b)=>b.quality-a.quality);best.set(key,arr.slice(0,3))}return [...best.values()].flat()}
+// whisper.cpp offsets are milliseconds (always /1000); API-style words carry seconds in
+// start/end. The old per-value ">100 ? /1000 : /1" heuristic turned an early word at e.g.
+// 50 ms into 50 s, so a span's start overshot its end and the cut aborted.
+export function flattenWhisper(json:any):Word[]{
+  const segments=json.transcription??json.segments??[]
+  return segments.flatMap((s:any)=>(s.tokens??s.words??[]).map((w:any)=>{
+    const off=w.offsets,word=String(w.text??w.word??'').trim()
+    const start=off&&off.from!=null?Number(off.from)/1000:Number(w.start??0)
+    const end=off&&off.to!=null?Number(off.to)/1000:Number(w.end??0)
+    return {word,start,end,probability:Number(w.p??w.probability??.8)}
+  })).filter((w:Word)=>w.word&&!/^\[/.test(w.word)&&w.end>w.start)
+}
+export function candidates(words:Word[]):Candidate[]{const best=new Map<string,Candidate[]>();for(let i=0;i<words.length;i++)for(let n=1;n<=8&&i+n<=words.length;n++){const span=words.slice(i,i+n);const start=span[0].start,end=span.at(-1)!.end,dur=end-start;if(dur<=0||dur>12||Math.min(...span.map(w=>w.probability))<.65||(n===1&&(dur<.09||dur>2))||span.some((w,j)=>j>0&&w.start-span[j-1].end>.6))continue;const phrase=span.map(w=>w.word).join(' ').replace(/\s+([,.!?])/g,'$1').trim(),key=phraseKey(phrase);if(!key)continue;const confidence=span.reduce((a,w)=>a+w.probability,0)/n;const quality=Math.max(0,Math.min(1,.72*confidence+.28*Math.min(1,dur/(n*.22))));const c={phrase,start,end,quality};const arr=best.get(key)??[];arr.push(c);arr.sort((a,b)=>b.quality-a.quality);best.set(key,arr.slice(0,3))}return [...best.values()].flat()}
 
 type Cue={text:string;start:number;end:number}
 const cueTime=(t:string):number=>{const m=t.match(/(\d+):(\d+):(\d+)[,.](\d+)/);return m?(+m[1]*3600+ +m[2]*60+ +m[3]+ +m[4]/1000):0}
@@ -66,7 +77,7 @@ export class Ingestor{
   cancel(job:string){this.cancelled.add(job)}
   async start(folders:string[]):Promise<string>{const job=id('job');void this.batch(job,folders);return job}
   private emit(job:string,stage:IngestProgress['stage'],file:string,index:number,total:number,pct:number,message:string){this.progress({jobId:job,stage,file,fileIndex:index,fileTotal:total,pct,message})}
-  private async batch(job:string,folders:string[]){try{const files=await scanFolders(folders);for(let i=0;i<files.length;i++){if(this.cancelled.has(job))break;await this.one(job,files[i],i+1,files.length)}this.emit(job,'done','',files.length,files.length,100,this.cancelled.has(job)?'Cancelled':'Library ready')}catch(e){this.emit(job,'error','',0,0,0,e instanceof Error?e.message:String(e))}finally{this.cancelled.delete(job)}}
+  private async batch(job:string,folders:string[]){try{const files=await scanFolders(folders);if(!files.length){this.emit(job,'error','',0,0,0,'No media files found in that folder');return}let failed=0;for(let i=0;i<files.length;i++){if(this.cancelled.has(job))break;try{await this.one(job,files[i],i+1,files.length)}catch(e){failed++;console.warn('ingest failed for',files[i],e)}}const done=this.cancelled.has(job)?'Cancelled':failed?`Library ready — ${failed} of ${files.length} file${failed>1?'s':''} skipped`:'Library ready';this.emit(job,'done','',files.length,files.length,100,done)}catch(e){this.emit(job,'error','',0,0,0,e instanceof Error?e.message:String(e))}finally{this.cancelled.delete(job)}}
   private async one(job:string,file:string,index:number,total:number){
     const hash=await hashFile(file);if(this.db.prepare('SELECT 1 FROM sources WHERE hash=?').get(hash))return
     const ffmpeg=await findBinary('ffmpeg'),ffprobe=await findBinary('ffprobe');if(!ffmpeg||!ffprobe)throw new Error('ffmpeg and ffprobe are required')
