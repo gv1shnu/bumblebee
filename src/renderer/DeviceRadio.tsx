@@ -139,6 +139,7 @@ export function DeviceRadio({ sources, stats }: { sources: Source[]; stats?: Cor
 
   const activeSegment = segments[clock.active]
   const activeSource = activeSegment?.kind === 'clip' ? sources.find(s => s.id === activeSegment.clip.sourceId) : undefined
+  const nearestId = sources.length ? sources.reduce((best, s) => Math.abs(positionFor(s.id) - clock.needle) < Math.abs(positionFor(best.id) - clock.needle) ? s : best).id : undefined
   const lit = Math.min(8, Math.round(clock.level * 13))
 
   return <main className={`device ${clock.flicker ? 'flicker' : ''}`}>
@@ -154,9 +155,9 @@ export function DeviceRadio({ sources, stats }: { sources: Source[]; stats?: Cor
         })}
         {sources.map(source => {
           const position = positionFor(source.id)
-          const near = Math.abs(position - clock.needle) < 10
+          const near = source.id === nearestId
           const active = activeSource?.id === source.id
-          return <span key={source.id} className={`station-tick ${active ? 'active' : ''} ${near ? 'near' : ''}`} style={{ left: `${position}%` }}>{frequencyLabel(source)}</span>
+          return <span key={source.id} className={`station-tick ${active ? 'active' : ''} ${near ? 'near' : ''}`} style={{ left: `${position}%` }}><b>{frequencyLabel(source)}</b></span>
         })}
         <div className="needle-trail" style={{ transform: `translate3d(${clock.needle * 0.83}cqw,0,0)`, opacity: Math.min(0.35, Math.abs(physics.current.velocity) / 150) }} />
         <div className={`needle ${phase}`} style={{ transform: `translate3d(${clock.needle * 0.83}cqw,0,0)` }}><span /></div>

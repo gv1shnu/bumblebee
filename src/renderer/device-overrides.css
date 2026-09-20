@@ -55,6 +55,15 @@ main.device { box-shadow: inset 0 1px var(--chrome-hi), inset 0 0 0 1px rgba(0, 
 .needle span { top: -8px; left: -6px; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 9px solid var(--rally); filter: drop-shadow(0 0 4px rgba(242, 192, 7, .65)); }
 .station-tick.active { text-shadow: 0 0 8px rgba(242, 192, 7, .45); }
 
+/* Crowded dial: show every tick mark, but only the label nearest the needle (or the
+   playing station) so 30+ sources don't smear into each other. */
+.station-tick { opacity: 1; }
+.station-tick::before { opacity: .38; }
+.station-tick.near::before, .station-tick.active::before { opacity: 1; }
+.station-tick b { display: block; opacity: 0; transition: opacity .2s ease; }
+.station-tick.near b { opacity: 1; color: var(--rally-dim); }
+.station-tick.active b { opacity: 1; color: var(--rally); }
+
 /* Terminal: soft top light, calmer reply rhythm. */
 .terminal { background: radial-gradient(130% 100% at 50% 0%, #100e0c, var(--void) 68%); }
 .reply-line { line-height: 1.5; letter-spacing: .01em; }
