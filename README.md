@@ -1,4 +1,4 @@
-# Bumblebee Radio
+# Bumblebee
 
 A macOS app that can't speak in its own voice. You type a message; it answers by splicing
 together fragments of dialogue from your own films and television — the way Bumblebee talks

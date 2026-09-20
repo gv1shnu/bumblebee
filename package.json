@@ -1,7 +1,7 @@
 {
   "name": "bumblebee-radio",
   "version": "0.1.0",
-  "author": "Bumblebee Radio",
+  "author": "Bumblebee",
   "private": true,
   "description": "Local film and television dialogue radio for macOS",
   "main": "out/main/index.js",
@@ -39,7 +39,7 @@
   },
   "build": {
     "appId": "local.bumblebee.radio",
-    "productName": "Bumblebee Radio",
+    "productName": "Bumblebee",
     "asarUnpack": [
       "node_modules/better-sqlite3/**/*",
       "node_modules/sqlite-vec/**/*",

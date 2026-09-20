@@ -172,7 +172,7 @@ export function DeviceRadio({ sources, stats }: { sources: Source[]; stats?: Cor
         <span><b>{latency != null ? latency : '—'}</b> ms latency</span>
       </p>
       <p className="user-line"><span>&gt;</span> {submitted || 'receiver standing by'}</p>
-      {phase === 'idle' && segments.length === 0 && <p className="intro">Bumblebee Radio — it answers only in fragments of dialogue spliced from films and television you own.</p>}
+      {phase === 'idle' && segments.length === 0 && <p className="intro">Bumblebee — it answers only in fragments of dialogue spliced from films and television you own.</p>}
       <div className="reply-line">
         {segments.map((segment, index) => {
           const start = segment.audioStart ?? Infinity
