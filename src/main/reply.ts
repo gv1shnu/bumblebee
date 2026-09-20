@@ -17,6 +17,10 @@ const task = (input: string, phrases: string[], invalid?: string[]) =>
 // windows cost proportionally more memory, so this is the memory-management dial.
 const autoContext = (): number => { const gb = totalmem() / 1073741824; return gb >= 32 ? 16384 : gb >= 16 ? 8192 : gb >= 8 ? 4096 : 2048 }
 
+// How many distinct phrases to offer the model. Enough to give real choice, few enough
+// that the prompt stays small and the reply comes back quickly.
+const PHRASE_CAP = 140
+
 // Try the local Ollama HTTP API first (it accepts num_ctx / keep_alive); fall back
 // to the `ollama run` CLI, which auto-starts the server but cannot size context.
 // Returns null only when the model is unreachable, so callers degrade rather than throw.
@@ -51,8 +55,12 @@ export async function generateReply(db: Database.Database, input: string): Promi
   }
   // Still nothing (no keywords, no embeddings yet) — reach for phrases anyway so the reply
   // is never silent.
-  if (!rows.length) rows = db.prepare(`SELECT id,phrase,quality FROM clips WHERE rejected=0 ORDER BY RANDOM() LIMIT 400`).all() as Array<{ id: string; phrase: string; quality: number }>
-  rows = rows.slice(0, 400)
+  if (!rows.length) rows = db.prepare(`SELECT id,phrase,quality FROM clips WHERE rejected=0 ORDER BY RANDOM() LIMIT 200`).all() as Array<{ id: string; phrase: string; quality: number }>
+  // Collapse to distinct phrases, keeping relevance order (FTS hits first, then semantic),
+  // and cap the prompt vocabulary. Duplicate phrase strings added nothing but tokens, and a
+  // tighter list keeps num_ctx small so generation stays fast without losing coverage.
+  const seenPhrase = new Set<string>()
+  rows = rows.filter(r => !seenPhrase.has(r.phrase) && seenPhrase.add(r.phrase)).slice(0, PHRASE_CAP)
   const fallback = (): ReplyResult => { const picked = rows.slice(0, 4); return { reply: picked.map(r => r.phrase).join(' ') || '…', fragments: picked.map(r => r.id), seed, model: 'local' } }
   if (settings.replyMode === 'local' || !rows.length) return fallback()
 
