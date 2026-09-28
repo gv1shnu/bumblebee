@@ -10,4 +10,3 @@ dist/
 *.mp3
 *.opus
 coverage/
-.claude/settings.local.json
