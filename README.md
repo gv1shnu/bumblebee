@@ -33,11 +33,18 @@ Everything runs locally. Nothing leaves the machine except model downloads you a
 - macOS on Apple silicon (arm64)
 - [`ffmpeg`](https://ffmpeg.org) (with `ffprobe`) — audio extraction and cutting
 - [`whisper-cli`](https://github.com/ggml-org/whisper.cpp) — transcription (`brew install whisper-cpp`)
-- [`ollama`](https://ollama.com) — reply generation, plus `nomic-embed-text` for search
 - Optional: Xcode command-line tools (`swiftc`) — used to build the on-device Speech
   fallback transcriber. Without them, transcription simply falls back to whisper alone.
-- A whisper model and a chat model — the app recommends and installs the right ones for
-  your RAM on first run
+- A whisper model — the app recommends one for your RAM and installs it from Setup
+
+[Ollama](https://ollama.com) is built into the app, so there is nothing to install for replies.
+On first launch Bumblebee starts its own copy (or uses an Ollama that's already running) and
+downloads two models: `nomic-embed-text` for search, and a reply model sized to your Mac. The
+pick works like [llmfit](https://github.com/AlexsJones/llmfit): the model has to fit in the
+memory the GPU can use and run at a usable speed on your chip, and the best model that does
+wins. Bigger Macs get bigger models, from `qwen3:4b-instruct` on an 8 GB Mac up to
+`qwen3:235b-instruct` on a 256 GB Mac Studio. Only instruct models are on the list: reasoning
+models spend minutes thinking before a reply that needs about twenty tokens.
 
 The corpus is built entirely from your own local media. It is never bundled with the app
 and never distributed.
@@ -49,10 +56,10 @@ npm install
 npm run dev      # develop against a live Electron window
 npm run build    # type-check and bundle main, preload, renderer
 npm test         # unit tests
-npm run dist     # package an arm64 .dmg
+npm run dist     # package an arm64 .dmg (fetches and bundles Ollama first)
 ```
 
-First launch opens **Setup**: it checks for the three binaries, recommends models for your
+First launch opens **Setup**: it checks for the binaries, installs the reply models for your
 Mac, and lets you point the receiver at a folder of media. Once a clip or two exists, the
 **Radio** screen is where you talk to it.
 

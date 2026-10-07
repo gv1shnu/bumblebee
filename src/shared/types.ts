@@ -15,7 +15,7 @@ export interface IngestProgress {
 export interface MachineInfo {
   chip: string; ramGB: number; cores: number; hasFfmpeg: boolean; hasWhisper: boolean; hasOllama: boolean
   ollamaModels: string[]; whisperModels: string[]; recommendedWhisper: string; recommendedChat: string
-  recommendedContext: number
+  recommendedChatSizeGB: number; recommendedContext: number
 }
 export interface Settings {
   mediaFolders: string[]; saveTranscripts: boolean; autoSaveAudio: boolean; exportFolder: string

@@ -1,10 +1,10 @@
 import { randomInt } from 'node:crypto'
-import { totalmem } from 'node:os'
+import { cpus, totalmem } from 'node:os'
 import type Database from 'better-sqlite3'
 import type { ReplyResult, Settings } from '../shared/types'
-import { findBinary, run } from './process'
-import { embedOne } from './ollama'
+import { embedOne, ensureServer } from './ollama'
 import { nearestPhraseKeys } from './db'
+import { recommendChat } from './models'
 
 // Character pre-prompt. Runs ahead of every generation so the model answers in
 // character before any exchange begins. Fixed persona, not user text.
@@ -22,27 +22,31 @@ const autoContext = (): number => { const gb = totalmem() / 1073741824; return g
 // The context a reply will use — shared with warm-up so the model is loaded at the same
 // size and the first reply doesn't pay for a reload. Explicit contextLength wins over auto.
 export const replyContext = (contextLength?: number): number => Number(contextLength) > 0 ? Number(contextLength) : autoContext()
+// The reply model for this Mac when the user hasn't chosen one.
+export const defaultChatModel = (): string => recommendChat(Math.round(totalmem() / 1073741824), cpus()[0]?.model ?? '', autoContext()).tag
 
 // How many distinct phrases to offer the model. Enough to give real choice, few enough
 // that the prompt stays small and the reply comes back quickly.
 const PHRASE_CAP = 140
 
-// Try the local Ollama HTTP API first (it accepts num_ctx / keep_alive); fall back
-// to the `ollama run` CLI, which auto-starts the server but cannot size context.
-// Returns null only when the model is unreachable, so callers degrade rather than throw.
+// Call the local Ollama HTTP API (it accepts num_ctx / keep_alive). If the server isn't up,
+// start the bundled one and try once more. Returns null only when the model is unreachable,
+// so callers degrade rather than throw.
 async function callModel(model: string, prompt: string, numCtx: number, keepAlive: string): Promise<string | null> {
-  try {
-    const res = await fetch('http://127.0.0.1:11434/api/generate', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      // format:json makes the model emit a valid object and STOP; num_predict is a hard
-      // ceiling. Without these an 8B model can run away for thousands of tokens on a
-      // phrase-list prompt — minutes of generation for a reply that needs ~20 tokens.
-      body: JSON.stringify({ model, prompt, stream: false, format: 'json', keep_alive: keepAlive, options: { num_ctx: numCtx, num_predict: 220, temperature: 0.4, stop: ['\n\n'] } })
-    })
-    if (res.ok) { const data = await res.json() as { response?: string }; if (typeof data.response === 'string') return data.response }
-  } catch { /* server down — try the CLI */ }
-  const bin = await findBinary('ollama'); if (!bin) return null
-  try { return await run(bin, ['run', model, prompt]) } catch { return null }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch('http://127.0.0.1:11434/api/generate', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        // format:json makes the model emit a valid object and STOP; num_predict is a hard
+        // ceiling. Without these an 8B model can run away for thousands of tokens on a
+        // phrase-list prompt — minutes of generation for a reply that needs ~20 tokens.
+        body: JSON.stringify({ model, prompt, stream: false, format: 'json', keep_alive: keepAlive, options: { num_ctx: numCtx, num_predict: 220, temperature: 0.4, stop: ['\n\n'] } })
+      })
+      if (res.ok) { const data = await res.json() as { response?: string }; if (typeof data.response === 'string') return data.response }
+      return null
+    } catch { if (attempt === 0 && !await ensureServer()) return null }
+  }
+  return null
 }
 
 export async function generateReply(db: Database.Database, input: string): Promise<ReplyResult> {
@@ -73,7 +77,7 @@ export async function generateReply(db: Database.Database, input: string): Promi
   const fallback = (): ReplyResult => { const picked = rows.slice(0, 4); return { reply: picked.map(r => r.phrase).join(' ') || '…', fragments: picked.map(r => r.id), seed, model: 'local' } }
   if (settings.replyMode === 'local' || !rows.length) return fallback()
 
-  const model = settings.chatModel || 'llama3.1:8b'
+  const model = settings.chatModel || defaultChatModel()
   const numCtx = replyContext(settings.contextLength)
   const keepAlive = `${Math.max(0, Number(settings.keepAlive ?? 5))}m`
   const preprompt = settings.persona === false ? '' : `${PERSONA}\n\n`

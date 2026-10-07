@@ -5,18 +5,21 @@ import { basename, join } from 'node:path'
 import { get } from 'node:https'
 import type { MachineInfo } from '../shared/types'
 import { findBinary, run } from './process'
+import { recommendChat } from './models'
+import { ensureServer, installedModels, ollamaBinary } from './ollama'
+import { replyContext } from './reply'
 
 const sysctl = async (key:string): Promise<string> => { const bin=await findBinary('sysctl'); return bin ? (await run(bin,['-n',key])).trim() : '' }
 export async function detect(userData: string): Promise<MachineInfo> {
-  const [chip,ram,cores,ffmpeg,whisper,ollama] = await Promise.all([sysctl('machdep.cpu.brand_string'),sysctl('hw.memsize'),sysctl('hw.ncpu'),findBinary('ffmpeg'),findBinary('whisper-cli'),findBinary('ollama')])
-  const ramGB=Math.round(Number(ram)/1073741824); let ollamaModels:string[]=[]
-  if (ollama) try { ollamaModels=(await run(ollama,['list'])).split('\n').slice(1).map(x=>x.trim().split(/\s+/)[0]).filter(Boolean) } catch {}
+  const [chip,ram,cores,ffmpeg,whisper,ollama] = await Promise.all([sysctl('machdep.cpu.brand_string'),sysctl('hw.memsize'),sysctl('hw.ncpu'),findBinary('ffmpeg'),findBinary('whisper-cli'),ollamaBinary()])
+  const ramGB=Math.round(Number(ram)/1073741824)
+  const ollamaModels=ollama&&await ensureServer()?await installedModels():[]
   const whisperModels:string[]=[]
   for (const dir of [join(homedir(),'.cache/whisper'),join(userData,'models')]) try { for(const f of await readdir(dir)) if(/^ggml-.*\.bin$/.test(f)) whisperModels.push(f.replace(/^ggml-|\.bin$/g,'')) } catch {}
   const recommendedWhisper=ramGB>=32?'large-v3':ramGB>=16?'medium.en':ramGB>=8?'small.en':'base.en'
-  const recommendedChat='llama3.1:8b'
-  const recommendedContext=ramGB>=32?16384:ramGB>=16?8192:ramGB>=8?4096:2048
-  return {chip:chip||process.arch,ramGB,cores:Number(cores)||1,hasFfmpeg:!!ffmpeg,hasWhisper:!!whisper,hasOllama:!!ollama,ollamaModels,whisperModels,recommendedWhisper,recommendedChat,recommendedContext}
+  const recommendedContext=replyContext()
+  const chat=recommendChat(ramGB,chip,recommendedContext)
+  return {chip:chip||process.arch,ramGB,cores:Number(cores)||1,hasFfmpeg:!!ffmpeg,hasWhisper:!!whisper,hasOllama:!!ollama,ollamaModels,whisperModels,recommendedWhisper,recommendedChat:chat.tag,recommendedChatSizeGB:chat.sizeGB,recommendedContext}
 }
 export async function pullWhisper(userData:string,model:string,onProgress:(pct:number)=>void): Promise<void> {
   if(!/^[a-z0-9.-]+$/i.test(model)) throw new Error('Invalid model name')

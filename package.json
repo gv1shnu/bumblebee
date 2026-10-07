@@ -22,7 +22,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "ingest": "tsx src/cli/ingest.ts",
-    "dist": "npm run build && electron-builder --mac dmg --arm64"
+    "fetch-ollama": "node scripts/fetch-ollama.mjs",
+    "dist": "npm run fetch-ollama && npm run build && electron-builder --mac dmg --arm64"
   },
   "dependencies": {
     "better-sqlite3": "^12.2.0",
@@ -59,6 +60,12 @@
       "out/**/*",
       "node_modules/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/ollama",
+        "to": "ollama"
+      }
     ],
     "mac": {
       "category": "public.app-category.entertainment",

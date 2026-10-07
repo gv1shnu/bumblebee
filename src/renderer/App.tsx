@@ -28,8 +28,8 @@ function Setup(){
     <section className="checks">{[['ffmpeg',machine.hasFfmpeg],['whisper-cli',machine.hasWhisper],['ollama',machine.hasOllama]].map(([n,ok])=><div key={String(n)}><i className={ok?'ok':'bad'}/>{n}<small>{ok?'ready':'not found'}</small></div>)}</section>
     <section className="models"><h2>Recommended models</h2>
       <div><b>Speech · {machine.recommendedWhisper}</b><span>{MODEL_SIZES[machine.recommendedWhisper]} download</span>{machine.whisperModels.includes(machine.recommendedWhisper)?<em>INSTALLED</em>:<button onClick={()=>{void window.bridge.settings.set({whisperModel:machine.recommendedWhisper});window.bridge.setup.pullWhisper(machine.recommendedWhisper)}}>Pull model</button>}</div>
-      <div><b>Reply · {machine.recommendedChat}</b><span>via Ollama</span>{machine.ollamaModels.includes(machine.recommendedChat)?<em>INSTALLED</em>:<button onClick={()=>{void window.bridge.settings.set({chatModel:machine.recommendedChat});window.bridge.setup.pullOllama(machine.recommendedChat)}}>Pull model</button>}</div>
-      {pull&&<progress value={pull.pct} max="100"/>}
+      <div><b>Reply · {machine.recommendedChat}</b><span>{machine.recommendedChatSizeGB} GB download</span>{machine.ollamaModels.includes(machine.recommendedChat)?<em>INSTALLED</em>:<button onClick={()=>{void window.bridge.settings.set({chatModel:machine.recommendedChat});window.bridge.setup.pullOllama(machine.recommendedChat)}}>Pull model</button>}</div>
+      {pull&&pull.pct<100&&<div className="ingest"><progress value={pull.pct} max="100"/><span>{pull.name} · {pull.pct}%</span></div>}
     </section>
     <section className="settings"><h2>Essentials</h2>
       <label>Reply mode<select defaultValue={settings?.replyMode??'llm'} onChange={e=>window.bridge.settings.set({replyMode:e.target.value as 'llm'|'local'})}><option value="llm">LLM · Ollama</option><option value="local">Local · no model</option></select></label>

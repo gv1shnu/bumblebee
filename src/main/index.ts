@@ -6,12 +6,12 @@ import { join } from 'node:path'
 import { IPC } from '../shared/ipc'
 import type { Utterance } from '../shared/types'
 import { CorpusDb, phrasesNeedingEmbeddings, storeEmbeddings } from './db'
-import { warmChat, warmEmbed, embedBatch } from './ollama'
+import { warmChat, warmEmbed, embedBatch, ensureServer, installedModels, pullModel, stopServer } from './ollama'
+import { EMBED_MODEL } from './models'
 import { Ingestor } from './ingest'
-import { generateReply, replyContext } from './reply'
+import { defaultChatModel, generateReply, replyContext } from './reply'
 import { detect, ensureFx, pullWhisper } from './setup'
 import { ensureSpeechHelper } from './speech'
-import { findBinary, run } from './process'
 
 let mainWindow:BrowserWindow|null=null;let corpus:CorpusDb;let ingestor:Ingestor
 const sender=(channel:string,payload:unknown)=>mainWindow?.webContents.send(channel,payload)
@@ -23,15 +23,24 @@ function register(userData:string){
   ipcMain.handle(IPC.pickFolder,async()=>{const r=await dialog.showOpenDialog({properties:['openDirectory']});return r.canceled?null:r.filePaths[0]});ipcMain.handle(IPC.startIngest,(_,f)=>ingestor.start(f));ipcMain.handle(IPC.cancelIngest,(_,id)=>ingestor.cancel(id))
   ipcMain.handle(IPC.historyList,(_,l,o)=>corpus.history(l,o));ipcMain.handle(IPC.historySave,(_,u:Omit<Utterance,'id'|'createdAt'>)=>{const row={...u,id:randomUUID(),createdAt:new Date().toISOString()};corpus.db.prepare('INSERT INTO utterances VALUES(?,?,?,?,?,?,?)').run(row.id,row.input,row.reply,JSON.stringify(row.fragments),row.seed,row.model,row.createdAt);return row});ipcMain.handle(IPC.historyRemove,(_,id)=>corpus.db.prepare('DELETE FROM utterances WHERE id=?').run(id));ipcMain.handle(IPC.historyClear,()=>corpus.db.prepare('DELETE FROM utterances').run())
   ipcMain.handle(IPC.settingsGet,()=>corpus.settings());ipcMain.handle(IPC.settingsSet,(_,p)=>corpus.setSettings(p));ipcMain.handle(IPC.pickExport,async()=>{const r=await dialog.showOpenDialog({properties:['openDirectory','createDirectory']});return r.canceled?null:r.filePaths[0]})
-  ipcMain.handle(IPC.detect,()=>detect(userData));ipcMain.handle(IPC.pullWhisper,(_,m)=>pullWhisper(userData,m,pct=>sender(IPC.pullProgress,{name:m,pct})));ipcMain.handle(IPC.pullOllama,async(_,m)=>{const bin=await findBinary('ollama');if(!bin)throw new Error('ollama not found');await run(bin,['pull',m],line=>{const n=line.match(/(\d+)%/);if(n)sender(IPC.pullProgress,{name:m,pct:Number(n[1])})})})
+  ipcMain.handle(IPC.detect,()=>detect(userData));ipcMain.handle(IPC.pullWhisper,(_,m)=>pullWhisper(userData,m,pct=>sender(IPC.pullProgress,{name:m,pct})));ipcMain.handle(IPC.pullOllama,(_,m)=>pullModel(m,pct=>sender(IPC.pullProgress,{name:m,pct})))
   ipcMain.handle(IPC.reviewNext,(_,filter)=>{let sql='SELECT id,phrase,dur,sourceId,quality,phones FROM clips c WHERE rejected=0',args:unknown[]=[];if(filter?.sourceId){sql+=' AND sourceId=?';args.push(filter.sourceId)}if(filter?.untaggedOnly)sql+=' AND NOT EXISTS(SELECT 1 FROM clip_tags t WHERE t.clipId=c.id)';sql+=' ORDER BY quality ASC LIMIT 1';return corpus.db.prepare(sql).get(...args)??null});ipcMain.handle(IPC.reviewTag,(_,id,tags:string[])=>corpus.db.transaction(()=>{const s=corpus.db.prepare('INSERT OR IGNORE INTO clip_tags VALUES(?,?)');tags.forEach(t=>s.run(id,t.trim().toLowerCase()))})());ipcMain.handle(IPC.reviewReject,(_,id)=>corpus.db.prepare('UPDATE clips SET rejected=1 WHERE id=?').run(id))
   ipcMain.handle(IPC.exportWrite,async(_,bytes:ArrayBuffer,ext:string,slug:string,srt?:string)=>{const settings=corpus.settings(),folder=settings.exportFolder||app.getPath('music');await mkdir(folder,{recursive:true});const now=new Date(),safe=slug.replace(/[^a-z0-9-_]+/gi,'-').slice(0,64),base=settings.filenamePattern.replace('{date}',now.toISOString().slice(0,10)).replace('{time}',now.toTimeString().slice(0,8).replace(/:/g,'-')).replace('{slug}',safe);const path=join(folder,`${base}.${ext}`);await writeFile(path,Buffer.from(bytes));if(srt&&settings.exportSrt)await writeFile(join(folder,`${base}.srt`),srt);return path})
 }
 async function createWindow(){mainWindow=new BrowserWindow({width:1180,height:760,minWidth:720,minHeight:560,backgroundColor:'#0a0a0b',titleBarStyle:'hiddenInset',webPreferences:{preload:join(__dirname,'../preload/index.js'),contextIsolation:true,nodeIntegration:false,sandbox:true}});mainWindow.webContents.setWindowOpenHandler(({url})=>{if(/^https?:\/\//.test(url))void shell.openExternal(url);return{action:'deny'}});if(process.env.ELECTRON_RENDERER_URL)await mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);else await mainWindow.loadFile(join(__dirname,'../renderer/index.html'))}
+// Ollama ships inside the app, so first launch finishes the install: start the bundled server,
+// pick the reply model this Mac can run well, and download it with the embedding model.
+async function installModels(){
+  if(!await ensureServer())return
+  const s=corpus.settings(),chat=s.chatModel||defaultChatModel();if(!s.chatModel)corpus.setSettings({chatModel:chat})
+  const have=await installedModels()
+  for(const m of [EMBED_MODEL,...(s.replyMode==='local'?[]:[chat])])if(!have.includes(m))await pullModel(m,pct=>sender(IPC.pullProgress,{name:m,pct}))
+}
 async function warmAndBackfill(){try{
+  await installModels()
   const s=corpus.settings()
-  if(s.replyMode!=='local')await warmChat(s.chatModel||'llama3.1:8b',Number(s.keepAlive)||5,replyContext(s.contextLength))
+  if(s.replyMode!=='local')await warmChat(s.chatModel||defaultChatModel(),Number(s.keepAlive)||5,replyContext(s.contextLength))
   await warmEmbed()
   for(;;){const need=phrasesNeedingEmbeddings(corpus.db,64);if(!need.length)break;const vecs=await embedBatch(need);const entries=need.flatMap((k,i)=>vecs[i]?[{phraseKey:k,vec:vecs[i]!}]:[]);if(!entries.length)break;storeEmbeddings(corpus.db,entries)}
 }catch(e){console.warn('warm/backfill failed',e)}}
-app.whenReady().then(async()=>{if(process.platform==='darwin'){const icon=join(app.getAppPath(),'build','icon.png');if(existsSync(icon))app.dock?.setIcon(icon)}const userData=app.getPath('userData');corpus=new CorpusDb(join(userData,'corpus.db'));ingestor=new Ingestor(corpus.db,userData,p=>sender(IPC.ingestProgress,p));register(userData);await ensureFx(userData);void ensureSpeechHelper(userData).catch(()=>null);warmAndBackfill();await createWindow();app.on('activate',()=>{if(BrowserWindow.getAllWindows().length===0)void createWindow()})});app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit()})
+app.whenReady().then(async()=>{if(process.platform==='darwin'){const icon=join(app.getAppPath(),'build','icon.png');if(existsSync(icon))app.dock?.setIcon(icon)}const userData=app.getPath('userData');corpus=new CorpusDb(join(userData,'corpus.db'));ingestor=new Ingestor(corpus.db,userData,p=>sender(IPC.ingestProgress,p));register(userData);await ensureFx(userData);void ensureSpeechHelper(userData).catch(()=>null);warmAndBackfill();await createWindow();app.on('activate',()=>{if(BrowserWindow.getAllWindows().length===0)void createWindow()})});app.on('will-quit',stopServer);app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit()})
