@@ -3,7 +3,7 @@ import { IPC, type Bridge } from '../shared/ipc'
 
 const invoke=(channel:string,...args:unknown[])=>ipcRenderer.invoke(channel,...args)
 const bridge: Bridge = {
-  corpus:{stats:()=>invoke(IPC.stats),sources:()=>invoke(IPC.sources),lookup:k=>invoke(IPC.lookup,k),clipAudio:id=>invoke(IPC.clipAudio,id),fxAudio:n=>invoke(IPC.fxAudio,n)},
+  corpus:{stats:()=>invoke(IPC.stats),sources:()=>invoke(IPC.sources),lookup:k=>invoke(IPC.lookup,k),clipAudio:id=>invoke(IPC.clipAudio,id),fxAudio:n=>invoke(IPC.fxAudio,n),reset:()=>invoke(IPC.resetLibrary)},
   reply:{generate:i=>invoke(IPC.generate,i)},
   ingest:{pickFolder:()=>invoke(IPC.pickFolder),start:f=>invoke(IPC.startIngest,f),cancel:id=>invoke(IPC.cancelIngest,id),onProgress:cb=>{const h=(_:unknown,p:Parameters<typeof cb>[0])=>cb(p);ipcRenderer.on(IPC.ingestProgress,h);return()=>ipcRenderer.removeListener(IPC.ingestProgress,h)}},
   history:{list:(l,o)=>invoke(IPC.historyList,l,o),save:u=>invoke(IPC.historySave,u),remove:id=>invoke(IPC.historyRemove,id),clear:()=>invoke(IPC.historyClear)},

@@ -47,6 +47,11 @@ export class CorpusDb {
       this.db.loadExtension(extensionPath)
     } catch (error) { console.warn('Vector extension unavailable; using cosine fallback', error) }
   }
+  // Start the library over. Settings, models, cached transcripts and phrase embeddings are kept,
+  // so re-tuning the same media is quick; reply history goes because it points at the old clips.
+  resetLibrary(): void {
+    this.db.transaction(() => { for (const t of ['clip_tags', 'clips', 'sources', 'utterances']) this.db.prepare(`DELETE FROM ${t}`).run() })()
+  }
   settings(): Settings {
     const values = { ...DEFAULT_SETTINGS } as Record<string, unknown>
     for (const row of this.db.prepare('SELECT k,v FROM settings').all() as Array<{k:string;v:string}>) values[row.k] = JSON.parse(row.v)

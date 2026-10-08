@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { IPC } from '../shared/ipc'
@@ -19,6 +19,11 @@ function register(userData:string){
   ipcMain.handle(IPC.clipAudio,async(_,id)=>{const r=corpus.db.prepare('SELECT file FROM clips WHERE id=? AND rejected=0').get(id) as {file:string}|undefined;if(!r)throw new Error('Clip not found');const b=await readFile(r.file);return b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength)})
   ipcMain.handle(IPC.fxAudio,async(_,name)=>{if(!['staticShort','staticLong','sweep','bed'].includes(name))throw new Error('Invalid effect');const b=await readFile(join(userData,'fx',`${name}.wav`));return b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength)})
   ipcMain.handle(IPC.generate,async(_,input)=>{if(typeof input!=='string'||!input.trim())throw new Error('Message required');const result=await generateReply(corpus.db,input.slice(0,2000));if(corpus.settings().saveTranscripts){const u={id:randomUUID(),input,reply:result.reply,fragments:JSON.stringify(result.fragments),seed:result.seed,model:result.model,createdAt:new Date().toISOString()};corpus.db.prepare('INSERT INTO utterances VALUES(@id,@input,@reply,@fragments,@seed,@model,@createdAt)').run(u)}return result})
+  ipcMain.handle(IPC.resetLibrary,async()=>{
+    const {response}=await dialog.showMessageBox(mainWindow!,{type:'warning',buttons:['Cancel','Reset Library'],defaultId:0,cancelId:0,message:'Reset the library?',detail:'This removes every clip, source and saved reply. Your media files, settings and downloaded models are kept, and tuning the same media again reuses its saved transcripts.'})
+    if(response!==1)return false
+    corpus.resetLibrary();await rm(join(userData,'clips'),{recursive:true,force:true});return true
+  })
   ipcMain.handle(IPC.pickFolder,async()=>{const r=await dialog.showOpenDialog({properties:['openDirectory']});return r.canceled?null:r.filePaths[0]});ipcMain.handle(IPC.startIngest,(_,f)=>ingestor.start(f));ipcMain.handle(IPC.cancelIngest,(_,id)=>ingestor.cancel(id))
   ipcMain.handle(IPC.historyList,(_,l,o)=>corpus.history(l,o));ipcMain.handle(IPC.historySave,(_,u:Omit<Utterance,'id'|'createdAt'>)=>{const row={...u,id:randomUUID(),createdAt:new Date().toISOString()};corpus.db.prepare('INSERT INTO utterances VALUES(?,?,?,?,?,?,?)').run(row.id,row.input,row.reply,JSON.stringify(row.fragments),row.seed,row.model,row.createdAt);return row});ipcMain.handle(IPC.historyRemove,(_,id)=>corpus.db.prepare('DELETE FROM utterances WHERE id=?').run(id));ipcMain.handle(IPC.historyClear,()=>corpus.db.prepare('DELETE FROM utterances').run())
   ipcMain.handle(IPC.settingsGet,()=>corpus.settings());ipcMain.handle(IPC.settingsSet,(_,p)=>corpus.setSettings(p));ipcMain.handle(IPC.pickExport,async()=>{const r=await dialog.showOpenDialog({properties:['openDirectory','createDirectory']});return r.canceled?null:r.filePaths[0]})
