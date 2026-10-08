@@ -21,6 +21,6 @@ export interface Settings {
   mediaFolders: string[]; saveTranscripts: boolean; autoSaveAudio: boolean; exportFolder: string
   exportFormat: 'wav'|'mp3'|'m4a'; exportSrt: boolean; filenamePattern: string
   historyRetention: 'all'|'500'|'100'; whisperModel: string; chatModel: string; replyMode: 'llm'|'local'
-  contextLength: number; keepAlive: number; persona: boolean
+  contextLength: number; keepAlive: number; persona: boolean; maxFragments: number
 }
 export interface ReplyResult { reply: string; fragments: ClipId[]; seed: number; model: string }

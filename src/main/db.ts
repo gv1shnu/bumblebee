@@ -6,7 +6,7 @@ import type { Clip, CorpusStats, Settings, Source, Utterance } from '../shared/t
 export const DEFAULT_SETTINGS: Settings = {
   mediaFolders: [], saveTranscripts: true, autoSaveAudio: false, exportFolder: '', exportFormat: 'wav',
   exportSrt: true, filenamePattern: '{date}_{time}_{slug}', historyRetention: 'all', whisperModel: '', chatModel: '', replyMode: 'llm',
-  contextLength: 0, keepAlive: 5, persona: true
+  contextLength: 0, keepAlive: 5, persona: true, maxFragments: 6
 }
 
 export class CorpusDb {
