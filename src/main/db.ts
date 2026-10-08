@@ -36,6 +36,8 @@ export class CorpusDb {
         INSERT INTO clips_fts(rowid,phrase) VALUES(new.rowid,new.phrase);
       END;
     `)
+    // Which segmenter cut a source's clips (see SEGMENTER in ingest.ts); rows from before this column are version 1.
+    try { this.db.exec('ALTER TABLE sources ADD COLUMN segmenter INT DEFAULT 1') } catch { /* already there */ }
     const put = this.db.prepare('INSERT OR IGNORE INTO settings(k,v) VALUES(?,?)')
     const tx = this.db.transaction(() => Object.entries(DEFAULT_SETTINGS).forEach(([k,v]) => put.run(k, JSON.stringify(v))))
     tx()
