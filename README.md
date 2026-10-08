@@ -26,28 +26,37 @@ band-limited filter so a dozen unrelated recordings sound like a single damaged 
 
 _Demo video coming soon._
 
-## What it needs
+## Install
 
-Everything runs locally. Nothing leaves the machine except model downloads you ask for.
+Download `Bumblebee-<version>-arm64.pkg` from the
+[latest release](https://github.com/gv1shnu/bumblebee/releases/latest) and open it. It needs a
+Mac with Apple silicon and nothing else: Ollama, ffmpeg, whisper and the on-device Speech helper
+are all inside the app.
 
-- macOS on Apple silicon (arm64)
-- [`ffmpeg`](https://ffmpeg.org) (with `ffprobe`) — audio extraction and cutting
-- [`whisper-cli`](https://github.com/ggml-org/whisper.cpp) — transcription (`brew install whisper-cpp`)
-- Optional: Xcode command-line tools (`swiftc`) — used to build the on-device Speech
-  fallback transcriber. Without them, transcription simply falls back to whisper alone.
-- A whisper model — the app recommends one for your RAM and installs it from Setup
+While it installs, the installer looks at your Mac's chip and memory and downloads the models
+that suit it: a reply model, `nomic-embed-text` for search, and a whisper speech model. On an
+8 GB Mac that's about 3.3 GB, and the installer sits on "Running package scripts" for a few
+minutes while it downloads. If a download can't finish (say you're offline), the install still
+completes and **Setup** in the app offers the same downloads. The installer's log is at
+`~/Library/Logs/Bumblebee/install.log`.
 
-[Ollama](https://ollama.com) is built into the app, so there is nothing to install for replies.
-On first launch Bumblebee starts its own copy (or uses an Ollama that's already running) and
-downloads two models: `nomic-embed-text` for search, and a reply model sized to your Mac. The
-pick works like [llmfit](https://github.com/AlexsJones/llmfit): the model has to fit in the
+The installer isn't signed with an Apple Developer ID yet, so macOS will refuse to open it the
+first time. Go to **System Settings → Privacy & Security**, scroll down to the message about
+Bumblebee, and click **Open Anyway**.
+
+### How the reply model is chosen
+
+The pick works like [llmfit](https://github.com/AlexsJones/llmfit): the model has to fit in the
 memory the GPU can use and run at a usable speed on your chip, and the best model that does
 wins. Bigger Macs get bigger models, from `qwen3:4b-instruct` on an 8 GB Mac up to
 `qwen3:235b-instruct` on a 256 GB Mac Studio. Only instruct models are on the list: reasoning
-models spend minutes thinking before a reply that needs about twenty tokens.
+models spend minutes thinking before a reply that needs about twenty tokens. The app uses an
+Ollama that's already running if there is one, otherwise it starts its own; models are kept in
+the standard `~/.ollama` folder either way.
 
-The corpus is built entirely from your own local media. It is never bundled with the app
-and never distributed.
+Everything runs locally. Nothing leaves the machine except those model downloads. The corpus
+is built entirely from your own local media. It is never bundled with the app and never
+distributed.
 
 ## Build and run
 
@@ -56,12 +65,18 @@ npm install
 npm run dev      # develop against a live Electron window
 npm run build    # type-check and bundle main, preload, renderer
 npm test         # unit tests
-npm run dist     # package an arm64 .dmg (fetches and bundles Ollama first)
+npm run vendor   # build the bundled tools into vendor/ (cached; first run takes a few minutes)
+npm run dist     # vendor + build, then package an arm64 .pkg installer
 ```
 
-First launch opens **Setup**: it checks for the binaries, installs the reply models for your
-Mac, and lets you point the receiver at a folder of media. Once a clip or two exists, the
-**Radio** screen is where you talk to it.
+`npm run vendor` downloads a pinned, checksum-verified Ollama and builds ffmpeg (LGPL, audio
+only), whisper-cli (Metal) and the Speech helper from source. It needs the Xcode command-line
+tools; cmake is set up privately if it isn't installed. In dev the app uses `vendor/` when it
+exists, and falls back to tools on your `PATH` when it doesn't.
+
+First launch opens **Setup**: it shows your Mac, the installed models, and lets you point the
+receiver at a folder of media. Once a clip or two exists, the **Radio** screen is where you
+talk to it.
 
 ## How it works
 
@@ -94,3 +109,10 @@ audio on disk beside it.
 
 [MIT](LICENSE) © Vishnu Gandarapu. The code is MIT-licensed; the dialogue corpus is built
 from your own local media, stays on your machine, and is never part of this project.
+
+The app bundles third-party tools under their own licenses, each shipped next to it in
+`Bumblebee.app/Contents/Resources`: [Ollama](https://github.com/ollama/ollama) (MIT),
+[whisper.cpp](https://github.com/ggml-org/whisper.cpp) (MIT) and
+[FFmpeg](https://ffmpeg.org) (LGPL 2.1 or later). FFmpeg is the unmodified 9.0.2 release from
+<https://ffmpeg.org/releases/>, built as a separate program with the configuration in
+[`scripts/vendor.mjs`](scripts/vendor.mjs).

@@ -3,15 +3,15 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { findBinary } from './process'
+import { findBinary, resourcesDir } from './process'
 import { EMBED_MODEL } from './models'
 
 const HOST = 'http://127.0.0.1:11434'
 
-// The packaged app ships Ollama in Contents/Resources/ollama (see scripts/fetch-ollama.mjs), so
+// The packaged app ships Ollama in Contents/Resources/ollama (see scripts/vendor.mjs), so
 // users never install it. Dev builds use vendor/ollama when fetched, else a system install.
 export async function ollamaBinary(): Promise<string | null> {
-  const bundled = [join(process.resourcesPath ?? '', 'ollama', 'ollama'), join(process.cwd(), 'vendor', 'ollama', 'ollama')]
+  const bundled = [join(resourcesDir(), 'ollama', 'ollama'), join(process.cwd(), 'vendor', 'ollama', 'ollama')]
   return bundled.find(p => existsSync(p)) ?? await findBinary('ollama')
 }
 

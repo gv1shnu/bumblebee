@@ -22,8 +22,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "ingest": "tsx src/cli/ingest.ts",
-    "fetch-ollama": "node scripts/fetch-ollama.mjs",
-    "dist": "npm run fetch-ollama && npm run build && electron-builder --mac dmg --arm64"
+    "vendor": "node scripts/vendor.mjs",
+    "dist": "npm run vendor && npm run build && electron-builder --mac pkg --arm64"
   },
   "dependencies": {
     "better-sqlite3": "^12.2.0",
@@ -65,6 +65,10 @@
       {
         "from": "vendor/ollama",
         "to": "ollama"
+      },
+      {
+        "from": "vendor/bin",
+        "to": "bin"
       }
     ],
     "mac": {
@@ -75,12 +79,19 @@
       },
       "target": [
         {
-          "target": "dmg",
+          "target": "pkg",
           "arch": [
             "arm64"
           ]
         }
-      ]
-    }
+      ],
+      "identity": null
+    },
+    "pkg": {
+      "installLocation": "/Applications",
+      "isRelocatable": false,
+      "welcome": "pkg/welcome.html"
+    },
+    "afterSign": "scripts/adhoc-sign.cjs"
   }
 }

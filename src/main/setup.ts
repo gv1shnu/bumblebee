@@ -4,22 +4,22 @@ import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import { get } from 'node:https'
 import type { MachineInfo } from '../shared/types'
-import { findBinary, run } from './process'
-import { recommendChat } from './models'
+import { findBinary, run, tool } from './process'
+import { EMBED_MODEL, recommendChat, recommendWhisper } from './models'
 import { ensureServer, installedModels, ollamaBinary } from './ollama'
 import { replyContext } from './reply'
 
 const sysctl = async (key:string): Promise<string> => { const bin=await findBinary('sysctl'); return bin ? (await run(bin,['-n',key])).trim() : '' }
 export async function detect(userData: string): Promise<MachineInfo> {
-  const [chip,ram,cores,ffmpeg,whisper,ollama] = await Promise.all([sysctl('machdep.cpu.brand_string'),sysctl('hw.memsize'),sysctl('hw.ncpu'),findBinary('ffmpeg'),findBinary('whisper-cli'),ollamaBinary()])
+  const [chip,ram,cores,ffmpeg,whisper,ollama] = await Promise.all([sysctl('machdep.cpu.brand_string'),sysctl('hw.memsize'),sysctl('hw.ncpu'),tool('ffmpeg'),tool('whisper-cli'),ollamaBinary()])
   const ramGB=Math.round(Number(ram)/1073741824)
   const ollamaModels=ollama&&await ensureServer()?await installedModels():[]
   const whisperModels:string[]=[]
   for (const dir of [join(homedir(),'.cache/whisper'),join(userData,'models')]) try { for(const f of await readdir(dir)) if(/^ggml-.*\.bin$/.test(f)) whisperModels.push(f.replace(/^ggml-|\.bin$/g,'')) } catch {}
-  const recommendedWhisper=ramGB>=32?'large-v3':ramGB>=16?'medium.en':ramGB>=8?'small.en':'base.en'
+  const recommendedWhisper=recommendWhisper(ramGB)
   const recommendedContext=replyContext()
   const chat=recommendChat(ramGB,chip,recommendedContext)
-  return {chip:chip||process.arch,ramGB,cores:Number(cores)||1,hasFfmpeg:!!ffmpeg,hasWhisper:!!whisper,hasOllama:!!ollama,ollamaModels,whisperModels,recommendedWhisper,recommendedChat:chat.tag,recommendedChatSizeGB:chat.sizeGB,recommendedContext}
+  return {chip:chip||process.arch,ramGB,cores:Number(cores)||1,hasFfmpeg:!!ffmpeg,hasWhisper:!!whisper,hasOllama:!!ollama,ollamaModels,whisperModels,recommendedWhisper,recommendedChat:chat.tag,recommendedChatSizeGB:chat.sizeGB,embedModel:EMBED_MODEL,recommendedContext}
 }
 export async function pullWhisper(userData:string,model:string,onProgress:(pct:number)=>void): Promise<void> {
   if(!/^[a-z0-9.-]+$/i.test(model)) throw new Error('Invalid model name')
@@ -31,7 +31,7 @@ export async function pullWhisper(userData:string,model:string,onProgress:(pct:n
   await rename(temp,target); onProgress(100)
 }
 export async function ensureFx(userData:string): Promise<void> {
-  const ffmpeg=await findBinary('ffmpeg'); if(!ffmpeg)return; const dir=join(userData,'fx'); await mkdir(dir,{recursive:true})
+  const ffmpeg=await tool('ffmpeg'); if(!ffmpeg)return; const dir=join(userData,'fx'); await mkdir(dir,{recursive:true})
   const jobs: Array<[string,string[]]> = [
     ['staticShort',['-f','lavfi','-i','anoisesrc=color=white:duration=0.4:sample_rate=48000','-af','highpass=f=500,lowpass=f=6000,volume=.18','-ac','1']],
     ['staticLong',['-f','lavfi','-i','anoisesrc=color=white:duration=1.2:sample_rate=48000','-af','highpass=f=500,lowpass=f=6000,volume=.16','-ac','1']],

@@ -1,0 +1,18 @@
+#!/bin/bash
+# Download this Mac's models while the installer runs, so the app is ready on first open.
+# Runs as root; the work runs as the logged-in user so models land in their home folder.
+# Never fails the install: if a download can't finish, Setup in the app offers it again.
+
+APP="$2/Bumblebee.app"; [ -d "$APP" ] || APP="/Applications/Bumblebee.app"
+USER_NAME=$(stat -f%Su /dev/console)
+if [ -z "$USER_NAME" ] || [ "$USER_NAME" = "root" ] || [ "$USER_NAME" = "loginwindow" ]; then
+  echo "[bumblebee] no logged-in user; models will be offered in Setup"; exit 0
+fi
+USER_HOME=$(dscl . -read "/Users/$USER_NAME" NFSHomeDirectory | awk '{print $2}')
+LOG_DIR="$USER_HOME/Library/Logs/Bumblebee"
+sudo -u "$USER_NAME" mkdir -p "$LOG_DIR"
+
+sudo -u "$USER_NAME" -H env ELECTRON_RUN_AS_NODE=1 \
+  "$APP/Contents/MacOS/Bumblebee" "$APP/Contents/Resources/app.asar/out/main/install.js" 2>&1 \
+  | sudo -u "$USER_NAME" tee "$LOG_DIR/install.log"
+exit 0

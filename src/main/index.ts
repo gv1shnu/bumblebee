@@ -6,12 +6,11 @@ import { join } from 'node:path'
 import { IPC } from '../shared/ipc'
 import type { Utterance } from '../shared/types'
 import { CorpusDb, phrasesNeedingEmbeddings, storeEmbeddings } from './db'
-import { warmChat, warmEmbed, embedBatch, ensureServer, installedModels, pullModel, stopServer } from './ollama'
-import { EMBED_MODEL } from './models'
+import { warmChat, warmEmbed, embedBatch, ensureServer, pullModel, stopServer } from './ollama'
+import { defaultChatModel } from './models'
 import { Ingestor } from './ingest'
-import { defaultChatModel, generateReply, replyContext } from './reply'
+import { generateReply, replyContext } from './reply'
 import { detect, ensureFx, pullWhisper } from './setup'
-import { ensureSpeechHelper } from './speech'
 
 let mainWindow:BrowserWindow|null=null;let corpus:CorpusDb;let ingestor:Ingestor
 const sender=(channel:string,payload:unknown)=>mainWindow?.webContents.send(channel,payload)
@@ -28,19 +27,13 @@ function register(userData:string){
   ipcMain.handle(IPC.exportWrite,async(_,bytes:ArrayBuffer,ext:string,slug:string,srt?:string)=>{const settings=corpus.settings(),folder=settings.exportFolder||app.getPath('music');await mkdir(folder,{recursive:true});const now=new Date(),safe=slug.replace(/[^a-z0-9-_]+/gi,'-').slice(0,64),base=settings.filenamePattern.replace('{date}',now.toISOString().slice(0,10)).replace('{time}',now.toTimeString().slice(0,8).replace(/:/g,'-')).replace('{slug}',safe);const path=join(folder,`${base}.${ext}`);await writeFile(path,Buffer.from(bytes));if(srt&&settings.exportSrt)await writeFile(join(folder,`${base}.srt`),srt);return path})
 }
 async function createWindow(){mainWindow=new BrowserWindow({width:1180,height:760,minWidth:720,minHeight:560,backgroundColor:'#0a0a0b',titleBarStyle:'hiddenInset',webPreferences:{preload:join(__dirname,'../preload/index.js'),contextIsolation:true,nodeIntegration:false,sandbox:true}});mainWindow.webContents.setWindowOpenHandler(({url})=>{if(/^https?:\/\//.test(url))void shell.openExternal(url);return{action:'deny'}});if(process.env.ELECTRON_RENDERER_URL)await mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);else await mainWindow.loadFile(join(__dirname,'../renderer/index.html'))}
-// Ollama ships inside the app, so first launch finishes the install: start the bundled server,
-// pick the reply model this Mac can run well, and download it with the embedding model.
-async function installModels(){
-  if(!await ensureServer())return
-  const s=corpus.settings(),chat=s.chatModel||defaultChatModel();if(!s.chatModel)corpus.setSettings({chatModel:chat})
-  const have=await installedModels()
-  for(const m of [EMBED_MODEL,...(s.replyMode==='local'?[]:[chat])])if(!have.includes(m))await pullModel(m,pct=>sender(IPC.pullProgress,{name:m,pct}))
-}
+// Models are downloaded by the installer (src/main/install.ts), not here; launch only starts the
+// bundled Ollama and loads what's installed. Setup offers the same pulls if a download failed.
 async function warmAndBackfill(){try{
-  await installModels()
+  if(!await ensureServer())return
   const s=corpus.settings()
   if(s.replyMode!=='local')await warmChat(s.chatModel||defaultChatModel(),Number(s.keepAlive)||5,replyContext(s.contextLength))
   await warmEmbed()
   for(;;){const need=phrasesNeedingEmbeddings(corpus.db,64);if(!need.length)break;const vecs=await embedBatch(need);const entries=need.flatMap((k,i)=>vecs[i]?[{phraseKey:k,vec:vecs[i]!}]:[]);if(!entries.length)break;storeEmbeddings(corpus.db,entries)}
 }catch(e){console.warn('warm/backfill failed',e)}}
-app.whenReady().then(async()=>{if(process.platform==='darwin'){const icon=join(app.getAppPath(),'build','icon.png');if(existsSync(icon))app.dock?.setIcon(icon)}const userData=app.getPath('userData');corpus=new CorpusDb(join(userData,'corpus.db'));ingestor=new Ingestor(corpus.db,userData,p=>sender(IPC.ingestProgress,p));register(userData);await ensureFx(userData);void ensureSpeechHelper(userData).catch(()=>null);warmAndBackfill();await createWindow();app.on('activate',()=>{if(BrowserWindow.getAllWindows().length===0)void createWindow()})});app.on('will-quit',stopServer);app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit()})
+app.whenReady().then(async()=>{if(process.platform==='darwin'){const icon=join(app.getAppPath(),'build','icon.png');if(existsSync(icon))app.dock?.setIcon(icon)}const userData=app.getPath('userData');corpus=new CorpusDb(join(userData,'corpus.db'));ingestor=new Ingestor(corpus.db,userData,p=>sender(IPC.ingestProgress,p));register(userData);await ensureFx(userData);warmAndBackfill();await createWindow();app.on('activate',()=>{if(BrowserWindow.getAllWindows().length===0)void createWindow()})});app.on('will-quit',stopServer);app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit()})

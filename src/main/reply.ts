@@ -1,10 +1,9 @@
 import { randomInt } from 'node:crypto'
-import { cpus, totalmem } from 'node:os'
 import type Database from 'better-sqlite3'
 import type { ReplyResult, Settings } from '../shared/types'
 import { embedOne, ensureServer } from './ollama'
 import { nearestPhraseKeys } from './db'
-import { recommendChat } from './models'
+import { autoContext, defaultChatModel, machine } from './models'
 
 // Character pre-prompt. Runs ahead of every generation so the model answers in
 // character before any exchange begins. Fixed persona, not user text.
@@ -13,17 +12,9 @@ const PERSONA = `You are Bumblebee, an Autobot scout and the sworn guardian of t
 const task = (input: string, phrases: string[], invalid?: string[]) =>
   `You can only speak by splicing fragments of recorded dialogue. Every fragment of your reply must come verbatim from the AVAILABLE PHRASES list. Do not invent, inflect, or alter a phrase. Prefer longer phrases over chains of single words. Reply with JSON only: {"fragments":[...],"gloss":"..."}\nINPUT: ${input}\n${invalid?.length ? `INVALID LAST TIME (not in the list): ${invalid.join(', ')}\n` : ''}AVAILABLE PHRASES:\n${phrases.join('\n')}`
 
-// Context window sized to host RAM when the user leaves it on auto (0). Larger
-// windows cost proportionally more memory, so this is the memory-management dial.
-// The prompt is bounded (persona + at most PHRASE_CAP phrases ≈ a couple thousand tokens),
-// so a huge window just wastes load time and memory. Scale modestly with RAM; users who
-// want a larger window can still set contextLength explicitly.
-const autoContext = (): number => { const gb = totalmem() / 1073741824; return gb >= 16 ? 8192 : gb >= 8 ? 4096 : 2048 }
-// The context a reply will use — shared with warm-up so the model is loaded at the same
-// size and the first reply doesn't pay for a reload. Explicit contextLength wins over auto.
-export const replyContext = (contextLength?: number): number => Number(contextLength) > 0 ? Number(contextLength) : autoContext()
-// The reply model for this Mac when the user hasn't chosen one.
-export const defaultChatModel = (): string => recommendChat(Math.round(totalmem() / 1073741824), cpus()[0]?.model ?? '', autoContext()).tag
+// Context window: auto (0) sizes it to host RAM; an explicit contextLength wins. Shared with
+// warm-up so the model is loaded at the same size and the first reply doesn't pay for a reload.
+export const replyContext = (contextLength?: number): number => Number(contextLength) > 0 ? Number(contextLength) : autoContext(machine().ramGB)
 
 // How many distinct phrases to offer the model. Enough to give real choice, few enough
 // that the prompt stays small and the reply comes back quickly.

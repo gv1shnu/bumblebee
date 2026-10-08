@@ -29,6 +29,7 @@ function Setup(){
     <section className="models"><h2>Recommended models</h2>
       <div><b>Speech · {machine.recommendedWhisper}</b><span>{MODEL_SIZES[machine.recommendedWhisper]} download</span>{machine.whisperModels.includes(machine.recommendedWhisper)?<em>INSTALLED</em>:<button onClick={()=>{void window.bridge.settings.set({whisperModel:machine.recommendedWhisper});window.bridge.setup.pullWhisper(machine.recommendedWhisper)}}>Pull model</button>}</div>
       <div><b>Reply · {machine.recommendedChat}</b><span>{machine.recommendedChatSizeGB} GB download</span>{machine.ollamaModels.includes(machine.recommendedChat)?<em>INSTALLED</em>:<button onClick={()=>{void window.bridge.settings.set({chatModel:machine.recommendedChat});window.bridge.setup.pullOllama(machine.recommendedChat)}}>Pull model</button>}</div>
+      <div><b>Search · {machine.embedModel}</b><span>274 MB download</span>{machine.ollamaModels.includes(machine.embedModel)?<em>INSTALLED</em>:<button onClick={()=>window.bridge.setup.pullOllama(machine.embedModel)}>Pull model</button>}</div>
       {pull&&pull.pct<100&&<div className="ingest"><progress value={pull.pct} max="100"/><span>{pull.name} · {pull.pct}%</span></div>}
     </section>
     <section className="settings"><h2>Essentials</h2>

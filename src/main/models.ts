@@ -1,3 +1,5 @@
+import { cpus, totalmem } from 'node:os'
+
 // Picks the reply model for this Mac the way llmfit does: a model must fit in the memory the
 // GPU can actually use, run fast enough to answer in seconds, and among those the best one
 // wins. Only non-reasoning instruct models are listed — thinking models spend minutes on
@@ -51,3 +53,13 @@ export function recommendChat(ramGB: number, chip: string, ctx: number): ChatMod
   const budget = gpuBudgetGB(ramGB)
   return CHAT_MODELS.find(m => loadedGB(m, ctx) <= budget && estimateTps(m, chip) >= MIN_TPS) ?? CHAT_MODELS[CHAT_MODELS.length - 1]
 }
+
+// The prompt is bounded (persona + at most PHRASE_CAP phrases ≈ a couple thousand tokens), so a
+// huge window just wastes load time and memory. Scale modestly with RAM.
+export const autoContext = (ramGB: number): number => ramGB >= 16 ? 8192 : ramGB >= 8 ? 4096 : 2048
+export const recommendWhisper = (ramGB: number): string => ramGB >= 32 ? 'large-v3' : ramGB >= 16 ? 'medium.en' : ramGB >= 8 ? 'small.en' : 'base.en'
+export const WHISPER_SIZES: Record<string, string> = { 'large-v3': '3.1 GB', 'medium.en': '1.5 GB', 'small.en': '488 MB', 'base.en': '148 MB' }
+
+export const machine = (): { ramGB: number; chip: string } => ({ ramGB: Math.round(totalmem() / 1073741824), chip: cpus()[0]?.model ?? '' })
+// What the app and the installer both use when the user hasn't chosen: the same answer everywhere.
+export const defaultChatModel = (): string => { const m = machine(); return recommendChat(m.ramGB, m.chip, autoContext(m.ramGB)).tag }
