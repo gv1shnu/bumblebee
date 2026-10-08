@@ -46,6 +46,7 @@ export function DeviceRadio({ sources, stats }: { sources: Source[]; stats?: Cor
   const [submitted, setSubmitted] = useState('')
   const [segments, setSegments] = useState<Segment[]>([])
   const [phase, setPhase] = useState<Phase>('idle')
+  const [failed, setFailed] = useState(false)
   const [freeSpeak, setFreeSpeak] = useState(false)
   const [latency, setLatency] = useState<number>()
   const [seed, setSeed] = useState<number>()
@@ -127,17 +128,26 @@ export function DeviceRadio({ sources, stats }: { sources: Source[]; stats?: Cor
     setSubmitted(message)
     setInput('')
     setPhase('thinking')
+    setFailed(false)
     const started = performance.now()
-    await engine.ctx.resume()
-    const result = freeSpeak
-      ? { reply: message, seed: Array.from(message).reduce((n, c) => Math.imul(n ^ c.charCodeAt(0), 16777619), 2166136261) >>> 0 }
-      : await window.bridge.reply.generate(message)
-    const matched = await matchText(result.reply)
-    setLatency(Math.round(performance.now() - started))
-    setSegments(matched)
-    setSeed(result.seed)
-    await engine.play(matched, result.seed)
-    setPhase('playing')
+    // Any failure here used to leave the receiver stuck on "scanning band…" forever.
+    try {
+      await engine.ctx.resume()
+      const result = freeSpeak
+        ? { reply: message, seed: Array.from(message).reduce((n, c) => Math.imul(n ^ c.charCodeAt(0), 16777619), 2166136261) >>> 0 }
+        : await window.bridge.reply.generate(message)
+      const matched = await matchText(result.reply)
+      setLatency(Math.round(performance.now() - started))
+      setSegments(matched)
+      setSeed(result.seed)
+      await engine.play(matched, result.seed)
+      setPhase('playing')
+    } catch (error) {
+      console.error('transmit failed', error)
+      setSegments([])
+      setFailed(true)
+      setPhase('idle')
+    }
   }
 
   const replay = async () => {
@@ -213,7 +223,7 @@ export function DeviceRadio({ sources, stats }: { sources: Source[]; stats?: Cor
           const status = ratio === 1 ? 'spoken' : ratio > 0 ? 'speaking' : 'waiting'
           return <span className={`fragment ${status} ${segment.kind === 'unmatched' && ratio > 0 ? 'unmatched' : ''}`} style={{ '--hue': `${(index % 3 - 1) * 4}deg` } as CSSProperties} key={`${index}-${segment.text}`}>{index > 0 && ratio > 0 && <i>·</i>}{text}</span>
         })}
-        {phase === 'idle' && segments.length === 0 && <span className="ghost">NO CARRIER</span>}
+        {phase === 'idle' && segments.length === 0 && <span className="ghost">{failed ? 'NO SIGNAL — TRANSMISSION FAILED' : 'NO CARRIER'}</span>}
       </div>
       {phase === 'idle' && segments.length > 0 && <div className="reply-actions">
         <button type="button" className="replay" onClick={replay} disabled={seed == null}>↻ Replay</button>
